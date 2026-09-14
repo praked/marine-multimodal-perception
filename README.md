@@ -22,6 +22,7 @@ tooling work with just the fisheye fitted; see
 ## Contents
 
 - [What is in this repository](#what-is-in-this-repository)
+- [Supplementary Tables](#Supplementary-Tables)
 - [Hardware](#hardware)
 - [Install](#install)
 - [Quickstart](#quickstart)
