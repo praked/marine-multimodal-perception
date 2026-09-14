@@ -58,6 +58,72 @@ tooling work with just the fisheye fitted; see
 - **Field data**, CAD for the sensor mount, and the full operational
   documentation set.
 
+
+## Supplementary Tables
+
+Sensor-suite power budgets, module bill of materials, and prototype hardware
+configuration for the condition-conditioned RGB–thermal–radar obstacle
+perception module.
+
+---
+
+### Table S1 — Illustrative sensing-plus-host-compute budgets
+
+All values in watts (W), excluding auxiliary electronics and conversion losses.
+
+**Sensor keys:** **R** = RGB camera · **T** = LWIR camera · **M** = compact
+mmWave radar · **L** = compact 3-D LiDAR.
+
+"Night" describes physical capability without an optical illuminator. Rain/fog
+entries are qualitative design considerations. The first eight rows use the same
+Raspberry Pi 4 compute allowance.
+
+| Sensors | Unlit-night evidence | Rain/fog consideration | Sensing (W) | Compute (W) | Sum (W) |
+|---|---|---|---:|---:|---:|
+| R | Ambient light required | Optical contrast/visibility limited | 1.0–1.5 | 3–7 | 4.0–8.5 |
+| T | Thermal contrast | Contrast, optics, and fog dependent | 0.3–1.0 | 3–7 | 3.3–8.0 |
+| M | Range and Doppler | Useful non-optical channel; clutter/weak returns | 2–4 | 3–7 | 5–11 |
+| R+T | Thermal channel | Both are optical; no weather guarantee | 1.3–2.5 | 3–7 | 4.3–9.5 |
+| R+M | Radar channel | Radar complements degraded RGB | 3.0–5.5 | 3–7 | 6.0–12.5 |
+| T+M | Thermal and radar | Complementary; validate joint failures | 2.3–5.0 | 3–7 | 5.3–12.0 |
+| R+T+M | Thermal and radar | Candidate for wider operating coverage | 3.3–6.5 | 3–7 | 6.3–13.5 |
+| R+L | LiDAR geometry | Optical attenuation/backscatter; active laser | 7.5–8.0 | 3–7 | 10.5–15.0 |
+| R+T+M, accelerated | Thermal and radar | Same sensing; different compute budget | 3.3–6.5 | 9–30 | 12.3–36.5 |
+
+
+Module power modes are not measured application consumption. All estimates
+require validation at the chosen workloads; maxima are not worst-case
+electrical specifications.
+
+---
+
+### Table S2 — Representative perception-module component costs
+
+Quantity is one per row unless stated otherwise.
+
+| Component | Cost (EUR) |
+|---|---:|
+| TI AWR1843BOOST radar | 410 |
+| Raspberry Pi 4, 4 GB | 89 |
+| FLIR Lepton 3.5 camera core | 136 |
+| PureThermal 3 USB interface | 102 |
+| RGB camera | 33 |
+| BNO085 IMU breakout | 23 |
+| **Total** | **793** |
+
+---
+
+### Table S3 — Prototype sensor-box configuration
+
+Configuration used for onboard multimodal perception.
+
+| Component | Configuration / output | Function in the pipeline |
+|---|---|---|
+| Fisheye RGB camera | 864 × 648 px; ~3 Hz; ~120° HFOV | Daylight semantics and obstacle segmentation. |
+| FLIR Lepton 3.x | 160 × 120 px; ~3 Hz; ~57° HFOV | Thermal obstacle evidence under weak or absent illumination. |
+| TI AWR1843BOOST | FMCW detections; range, azimuth, and Doppler; 9 m configured range | Illumination-independent geometric and motion evidence. |
+| BNO085 IMU | Attitude and linear acceleration; 100 Hz | Horizon alignment and platform-motion context. |
+| Raspberry Pi 4 | 64-bit ARM embedded computer | Acquisition, inference, health monitoring, and sector-map output. |
 ## Hardware
 
 <p align="center">
@@ -67,15 +133,6 @@ tooling work with just the fisheye fitted; see
 <p align="center">
   <img src="images/sensors.JPG" alt="Sensor module" width="60%">
 </p>
-
-| Component | Role |
-|---|---|
-| **Raspberry Pi 4 Model B** | Capture, logging, on-device segmentation. (A Pi 5 was tried and reverted; it browns out under sensor load on boat power.) |
-| **RGB fisheye camera** (CSI, 864×648) | Daylight vision, ~120° usable horizontal FOV. The primary sensor. |
-| **FLIR Lepton 3.0 / PureThermal** (160×120) | Night and low-visibility LWIR, ~57° HFOV. |
-| **TI AWR1843BOOST mmWave radar** | Range + bearing + Doppler, ~9 m unambiguous range. |
-| **BNO085 IMU** (UART-RVC) | Roll/pitch/yaw at 100 Hz: the horizon reference when vision fails. |
-| **DS3231 RTC** | Correct timestamps with no network. |
 
 CAD for the 3D-printed mount is in [CAD/](CAD/); measured sensor offsets are in
 [docs/reference/extrinsics.md](docs/reference/extrinsics.md).
