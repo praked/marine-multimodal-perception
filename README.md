@@ -60,8 +60,8 @@ tooling work with just the fisheye fitted; see
 
 ## Hardware
 
-![Obstacle detection enclosure](images/box.JPG)
-![Sensor module](images/sensors.JPG)
+<img src="images/box.JPG" alt="Obstacle detection enclosure" width="60%">
+<img src="images/sensors.JPG" alt="Sensor module" width="60%">
 
 | Component | Role |
 |---|---|
