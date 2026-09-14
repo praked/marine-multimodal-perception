@@ -1,0 +1,87 @@
+# Editable config for the open-vocabulary detector labeller
+# (scripts/eval/detector_labeler.py, GroundingDINO). Iterate, then run
+#   scripts/gpu_labeling/iterate_detector.sh <tag>
+#
+# GroundingDINO degrades when the text prompt lists too many phrases, so we run
+# it in focused PASSES and merge the results (per-class NMS). Each pass has its
+# own short phrase list and thresholds. This lets us keep the off-coast object
+# detections strict while maximising recall of pontoon structure separately.
+#
+# `queries` maps each phrase -> a canonical class (boat/duck/buoy/person/
+# structure/other). The text prompt for a pass is its phrases joined with " . ".
+
+model: IDEA-Research/grounding-dino-base
+# Detector input resolution (default 800). Higher recovers thin poles + small
+# distant objects at the cost of speed.
+image_shortest_edge: 1000
+
+# Drop a structure box if >= this fraction of its area is inside a boat box
+# (a vessel whose mast/rig also got a structure label). Fine grid: 0.8 lifts
+# structure precision 0.78 -> 0.83 (removes ~7 FPs) with zero loss of real
+# structures; 0.6 and 0.8 were identical, so 0.8 is the safer pick.
+boat_gate: 0.8
+
+passes:
+  # Objects on the water. Fine grid: objects bt 0.30 (vs 0.35) recovers more
+  # boats AND people (person recall 0.44 -> 0.53) with precision held.
+  - name: objects
+    box_threshold: 0.30
+    text_threshold: 0.30
+    queries:
+      boat: boat
+      sailboat: boat
+      motorboat: boat
+      kayak: boat
+      duck: duck
+      swan: duck
+      buoy: buoy
+      person: person
+      swimmer: person
+
+  # Pontoon structure: a short focused prompt at a lower threshold so all the
+  # elements (poles, ladder, deck) get boxed. Each phrase is concrete so it
+  # localises an element rather than the whole shoreline.
+  - name: structure
+    box_threshold: 0.20     # grid winner (se=1000, struct_bt=0.20)
+    text_threshold: 0.18
+    queries:
+      post: structure
+      piling: structure
+      pole: structure
+      ladder: structure
+      platform: structure
+      diving platform: structure
+
+  # Large/complex metal structures (gantry, crane, machinery on the dock) that
+  # the post/platform phrases miss. Specific enough not to fire on bare
+  # shoreline; lower threshold for recall.
+  - name: structures_large
+    box_threshold: 0.20
+    text_threshold: 0.18
+    queries:
+      crane: structure
+      gantry: structure
+      machinery: structure
+      metal tower: structure
+      scaffolding: structure
+
+  # NOTE (measured against the eval clip): a dedicated low-profile "water
+  # users" pass (swimmer / paddleboarder / kayaker) does NOT help. The people
+  # the detector misses are tiny distant figures (far shore, between distant
+  # posts), not a vocabulary gap: GroundingDINO can't resolve them, and the
+  # only threshold low enough to fire on them (~0.20) floods false positives
+  # (person precision 0.88 -> 0.16). At a safe threshold (0.30) it recovers
+  # zero new true positives and only adds FPs, so class-agnostic F1 drops
+  # 0.69 -> 0.66. Kept commented as a reference; re-enable only if you get
+  # closer/clearer swimmer footage.
+  # - name: water_users
+  #   box_threshold: 0.30
+  #   text_threshold: 0.25
+  #   queries:
+  #     swimmer: person
+  #     person swimming: person
+  #     paddleboarder: person
+  #     paddleboard: person
+  #     kayak: boat
+  #     kayaker: boat
+  #     canoe: boat

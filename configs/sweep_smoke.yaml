@@ -1,0 +1,9 @@
+# Tiny smoke-test grid for sweep.py. Single combo, one short clip.
+eval_clips:
+  Boats: "data/Boats/2025-06-23_16-21-07"
+
+scene_weights:
+  Boats: 1.0
+
+grid:
+  fisheye.gradient_threshold: [30]

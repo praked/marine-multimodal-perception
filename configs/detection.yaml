@@ -1,0 +1,770 @@
+# Default detection / fusion parameters.
+#
+# All knobs surfaced by Phase I.4.4 (parameter sweeps) live here.
+# Winning sweep configs are saved back here with a metric tag in
+# the commit message.
+
+horizon:
+  # RANSAC parameters for water-line detection. Shared by fisheye and
+  # thermal pipelines (and by fusion when run end-to-end).
+  ransac_iters: 200
+  inlier_thresh: 1.5
+  confidence_thresh: 0.5
+  fallback_row: 0          # 0 = whole frame retained if RANSAC fails
+  canny_low: 50
+  canny_high: 150
+  blur_kernel: 5
+  # lazy (2026-09-04, default OFF = byte-identical offline): with a water mask
+  # present, use the segmented water edge as the horizon and SKIP the
+  # Canny/RANSAC fit (~120 ms of the 230 ms fisheye stage on the Pi 4; the
+  # RANSAC draw is O(iterations x edge points)). The edge line must reach
+  # lazy_min_conf, else the RANSAC runs as before. Intended for the on-box
+  # shadow with the seg detector (configs/detection_shadow_seg.yaml).
+  lazy: false
+  lazy_min_conf: 0.5
+  imu_seed:
+    # IMU-gated horizon (pipeline._detect_horizon_imu; needs a live/replayed
+    # BNO085). The RANSAC line is accepted only when it lands within
+    # max_dev_px of the IMU-predicted horizon at the principal-point column;
+    # a low-confidence OR deviant (shoreline-locked) line is replaced by the
+    # IMU-predicted line for both the mask and the returned line. Biggest
+    # expected win on the 160x120 thermal, whose Canny-RANSAC is the weakest.
+    # Default OFF: byte-identical without it. Overridable per-camera via
+    # thermal.horizon.imu_seed.
+    enabled: false
+    max_dev_px: 60
+
+fisheye:
+  # Obstacle detector: "blob" (gradient/glint + SimpleBlobDetector, the
+  # original) or "segmentation" (connected components of the obstacle class in
+  # the water region: needs a water mask; see segmentation.detect below).
+  # Phase B of the LaRS work; falls back to blob when no mask is present.
+  detector: blob
+  # Bearing model for detections: "linear" = AuthorZero's (x - cx)/pix_deg_ratio
+  # magic numbers (cx=472, 7.2); "pinhole" = atan((x - cx_K)/fx) from the
+  # calibrated camera matrix of the undistorted image.
+  # DEFAULT pinhole since 2026-07-09: association_report on the 16-37-01 quad
+  # clip (3442 pixel-matched detections) measured camera-minus-radar bearing
+  # residuals of median -8.6 deg under linear vs -3.4 deg under pinhole (and a
+  # much tighter spread). The remaining ~-3 deg may be a small radar<->fisheye
+  # mount yaw (extrinsics assume none): re-measure on an isolated-target clip.
+  bearing_model: pinhole
+  # Darkness flag threshold on the frame's mean grayscale luminance
+  # (FisheyeResult.is_dark: a stats-only context signal for the fusion
+  # scorer, never a detection gate here). 25 matches the SegWorker darkness
+  # gate on the Pi (scripts/gpu_seg/pi_seg_worker.py; measured day ~99.8 /
+  # dawn ~100.3 / night ~0.0 mean luminance, 2026-07-07).
+  darkness_thresh: 25.0
+  # Glint removal in HSV-V before gradient detection.
+  glint_inpaint_low: 240
+  glint_inpaint_high: 255
+  glint_inpaint_radius: 3
+  # Sobel-x gradient + threshold.
+  gaussian_window: 5
+  gradient_threshold: 30
+  median_blur: 3
+  blob:
+    minThreshold: 180
+    maxThreshold: 255
+    blobColor: 255
+    minArea: 20
+    filterByCircularity: false
+    filterByConvexity: false
+    filterByInertia: false
+
+thermal:
+  # See fisheye.bearing_model (pinhole here uses the undistorted image's
+  # optimal new K; linear uses the magic cx=77 / 2.82).
+  # REVERTED to linear 2026-07-09 evening (was pinhole since the same
+  # morning). The calibrated thermal fx=63.8 implies a ~103 deg HFOV:
+  # arbitrated against fisheye GroundingDINO GT on the 16-37-01 quad clip
+  # (977 same-frame detection/GT pairs, docs/history/2026-07-09_thermal_tuning.md):
+  # at off-centre pixels the pinhole bearings miss GT by 25.7 deg median vs
+  # 11.8 under linear, and an fx ladder puts the error minimum at fx ~147-180
+  # (HFOV 48-67 deg, i.e. the Lepton datasheet 57), NOT the calibrated 63.8.
+  # The morning's radar A/B (+14.6 linear / -1.0 pinhole) was CIRCULAR for
+  # this question: the same calibrated K projects the radar into the image
+  # for the pixel match AND computes the bearing, so pinhole scores ~0 by
+  # construction. Linear (= datasheet geometry) is correct until the thermal
+  # intrinsics are recalibrated (V.2, open question #1/#7).
+  bearing_model: linear
+  # Defective sensor rows, in CAPTURED-frame coordinates, repaired first
+  # thing in every thermal consumer (cv_common.repair_dead_rows: row :=
+  # mean of its healthy neighbours; applied BEFORE undistortion). The
+  # Lepton 3 in this box has a stuck-hot FPA row: sensor row 21, present
+  # since at least the 2026-07-14 stability soak (absent on 2026-07-08),
+  # full width (152/160 px), 242-249 constant, no bleed into neighbours.
+  # With the 180-degree capture rotation (box.env, since 2026-08-14) it
+  # lands on row 98 -- in the water band where the hot-blob detector looks
+  # (pre-rotation clips carried it at row 21, in the masked sky). The
+  # factory bad-pixel map is not user-updatable; a module swap is the only
+  # hardware fix. [] disables (byte-identical path). Measured 2026-08-27.
+  dead_rows: [98]
+  initial_average: 127.5   # seed for the running-mean background
+  contrast_guard: 50       # only contrast-stretch when sub-frame max > this
+  object_thresh: 100
+  preprocess:
+    # Denoise/contrast preprocessing before the background model
+    # (pipeline.thermal_preprocess). Applied to the full gray pre-mask so
+    # CLAHE tiles aren't skewed by the zeroed sky region. Added for the
+    # 2026-07-09 thermal tuning sweep (docs/history/2026-07-09_thermal_tuning.md).
+    # Default OFF: byte-identical to the pre-preprocess pipeline.
+    enabled: false
+    median_ksize: 0        # 0/1 = off; >=3 = cv2.medianBlur kernel (odd)
+    clahe:
+      enabled: false
+      clip_limit: 2.0
+      tile: 8              # tileGridSize = (tile, tile)
+  quality_guard:
+    # Wet-cover / obscured-lens detector (docs/thermal_water_problem.pdf).
+    # A water film on the cover is near-opaque in LWIR: the scene collapses
+    # to a uniform field (day-1: std-dev 40-60 dry -> 10-20 wet, dynamic
+    # range ~200 -> 50-100). When the guard trips, the frame's thermal
+    # detections are suppressed so a blind thermal stops voting in fusion
+    # (single-sensor "uniform smear" blobs are noise, not signal).
+    # Thresholds match smoke_capture.py's in-field contrast check.
+    # Default OFF: behaviour is byte-identical to the pre-guard pipeline.
+    enabled: false
+    min_std: 25.0           # per-frame grayscale std-dev floor
+    min_dyn_range: 120.0    # per-frame p99 - p1 floor
+  background:
+    # Background model for the thermal obstacle detector.
+    # running_mean: AuthorZero's global scene-mean subtraction (default;
+    #   byte-identical to the original pipeline).
+    # mog2: per-pixel MOG2 (PLAN §I.4.7 candidate #5). The global mean
+    #   collapses on uniform night water (OpenWater thermal fires 0%);
+    #   a per-pixel model keeps sensitivity to local hot blobs. Stateful
+    #   per clip. Tune history/var_threshold on the 2026-07-07 captures.
+    method: running_mean
+    mog2:
+      history: 90           # frames of background memory (~30 s at 3 fps)
+      var_threshold: 16.0   # Mahalanobis^2 gate for "foreground"
+      learning_rate: -1     # -1 = OpenCV auto (≈ 1/history)
+  profiles:
+    # Sun-elevation-scheduled thermal parameter profiles: the 2026-07-09
+    # close-out's "time-of-day thermal roles" (day = animal/swimmer
+    # detection, night = thermal primary; docs/guides/capture_runbook.md
+    # §3.4, docs/history/2026-07-09_thermal_tuning.md close-out #4) wired
+    # as a runtime scheduler. The pipeline resolves the active profile
+    # once per frame from the sun elevation it is given (replay: computed
+    # from the frame timestamp like fusion_model/build_features.py; live:
+    # RTC-backed clock + gps_boat1.current_sun_elevation). Each profile
+    # deep-merges its overrides onto the thermal block above; absent
+    # elevation resolves to `day` (the only profile validated on open
+    # water) and is logged once. Default OFF: byte-identical pipeline.
+    #
+    # PROFILE CONTENTS ARE MEASUREMENTS, NOT TUNABLES. Each block cites
+    # the 2026-07-09 sweep (docs/history/2026-07-09_thermal_tuning.md);
+    # changing a value here is a new sweep, not an edit.
+    enabled: false
+    # force: night          # bypass the scheduler for a replay A/B
+    #                       # (fusion.py --thermal-profile sets this)
+    # Band edges (deg solar elevation) — the repo's civil-twilight
+    # convention (dashboard/tools/enrich_bundle.py daypart bands,
+    # fusion_model/evaluate.py strata):
+    #   day       elev >= 10  (enrichment's "day"; its golden band 0..10
+    #                          joins twilight here — low sun is where the
+    #                          CLAHE profile starts earning its FPs)
+    #   twilight  -6 <= elev < 10
+    #   night     elev < -6   (below civil twilight)
+    day_min_elev_deg: 10.0
+    night_max_elev_deg: -6.0
+    # day: the defaults above, untouched. Stage-4 FP-constrained sweep
+    # (re-run under corrected geometry, sweep_final_linear): under an
+    # open-water FP constraint the defaults are the UNIQUE Pareto point —
+    # every dockside-recall gain paid open-water FPs. The day role is
+    # small warm targets (swimmers/animals), where that selectivity is
+    # the feature.
+    day: {}
+    # twilight: the measured "dock profile" = the stage-2 candidate
+    # (object_thresh 80, minArea 4 = already default, median3 +
+    # CLAHE(clip 4, tile 4)). Day-1 labelled corpus: thermal bin recall
+    # 0.189 -> 0.433 at equal precision; corrected-geometry re-run
+    # F1 0.693 / R 0.781 / P 0.622. Explodes on target-free open water
+    # (CLAHE amplifies water/noise texture 2.5-7x det/frame) — which is
+    # why it is scheduled at low sun instead of default-on.
+    twilight:
+      object_thresh: 80
+      preprocess:
+        enabled: true
+        median_ksize: 3
+        clahe: {enabled: true, clip_limit: 4.0, tile: 4}
+    # night: CLAHE + MOG2(h45, v8) — the strongest night candidate on
+    # record (stage-5 day-1 regression: recall 0.561 vs baseline 0.189,
+    # P 0.072; the earlier "mog2 halves recall" verdict was measured
+    # WITHOUT preprocessing at h90/v16 and does not hold under CLAHE).
+    # The global running mean collapses on uniform night water; per-pixel
+    # MOG2 keeps sensitivity to local hot blobs, and at night thermal is
+    # the primary sensor. object_thresh is unused under mog2 (the
+    # foreground threshold is MOG2's own). ⚠ UNVALIDATED ON NIGHT DATA —
+    # re-A/B when audited night frames land (the data plan's ~500-1,000
+    # night frames); the swaying-platform FP caveat stands.
+    night:
+      preprocess:
+        enabled: true
+        median_ksize: 3
+        clahe: {enabled: true, clip_limit: 4.0, tile: 4}
+      background:
+        method: mog2
+        mog2: {history: 45, var_threshold: 8.0, learning_rate: -1}
+  # horizon:                # optional thermal-specific overrides, merged
+  #   canny_low: 30         # over the shared `horizon:` block above:
+  #   canny_high: 100       # the 160x120 LWIR frame may want different
+  #   inlier_thresh: 1.0    # edge/RANSAC settings than the fisheye.
+  blob:
+    minThreshold: 180
+    maxThreshold: 255
+    blobColor: 255
+    minArea: 4
+    filterByCircularity: false
+    filterByConvexity: false
+    filterByInertia: false
+
+mmwave:
+  # Radar mount yaw, degrees: the measured radar-minus-truth bearing offset,
+  # applied by rotating the point cloud (pipeline.process_mmwave).
+  # MEASURED -6.0 +/- 0.8 on 2026-08-19 from a person at surveyed bearings on a
+  # 2.99 m cross-line: four estimates spanning -5.20 to -6.60. The angular SCALE
+  # came out at 0.999, i.e. the radar's angle measurement is unbiased and the
+  # whole discrepancy is this one mechanical rotation.
+  # PER-MOUNT, like the thermal rotation: it describes the box as reassembled on
+  # 2026-08-14. Clips from earlier assemblies predate it (the 2026-07-09 quad
+  # clip measured a camera-minus-radar residual of about -3.4 deg on a different
+  # build), so re-running those with this value applied re-interprets them.
+  # 0.0 disables the correction.
+  mount_yaw_deg: -6.0
+  # Filter applied to each frame's point cloud before bin assignment.
+  # y_min raised 0.1 -> 0.5 on 2026-07-09: every capture to date has radar
+  # clutterRemoval OFF, and the persistent 0.2-0.45 m mount-clutter cluster
+  # (CLAUDE.md §10.5) both fakes central-bin agreement and pollutes
+  # min_range/TTC. Quad-clip sweep at 0.5: heading jitter 2.61 -> 1.81
+  # deg/frame, median steer +15.3 -> +5.8 deg (off the FOV edge), ambiguous
+  # 26 -> 16. A real return inside 0.5 m is effectively already a collision
+  # (cameras still cover it). REVISIT after the clutterRemoval -1 1 A/B:
+  # with clutter removed at the source, 0.1 restores the full envelope.
+  y_min: 0.5               # metres; drop very-near returns (mount clutter)
+  # ⚠ 5.0 discards the radar's 5-9 m early-warning band: the 2026-08-19
+  # crossing GT subject transits at 6-8.7 m and is INVISIBLE to the whole
+  # pipeline (fusion votes, min_range, motion.targets) under this cap
+  # (measured 2026-08-24; target_motion_eval --y-max 9.0 evaluates past
+  # it). A crossing target matters most exactly in that band (3-6 s of
+  # warning at sailing speeds). Raising it changes fusion/nav semantics
+  # for every consumer, so it stays a deliberate decision: revisit
+  # together with y_min after the on-water clutterRemoval A/B.
+  y_max: 9.0  # D.2 (AuthorOne 2026-08-24): 5.0 tracked ZERO targets through the
+  # 2026-08-19 crossing transit (6-8.7 m) vs 31 at 9.0, with a clean null
+  # dockside — the 5-9 m band is the 3-6 s early-warning zone. y_min /
+  # self_clutter unchanged.
+  self_clutter:
+    # Boat-frame self-reflection suppression, MEASURED on the 16-37-01 quad
+    # clip (2026-07-09): a blob at X -0.25..-0.5, Y 0.25..1.0 m is present in
+    # 100% of 460 frames with dead Doppler (median |V| = one quantization
+    # bin, 32% exactly 0): BOAT structure, not the world and NOT the box:
+    # the 2026-07-09 lab bench session (box off the boat) found only 4-16%
+    # sporadic dead-Doppler zone occupancy (longest run 6 frames vs the
+    # boat's continuous 100%), so the enclosure/mount is clean and the
+    # reflector is bow-ward/port on the boat itself
+    # (docs/history/2026-07-09_lab_radar_runsheet.md §4.1). Disable for lab data.
+    # y_min only shaves its near half; this box removes the rest without
+    # blinding the whole near field. Points inside the box are dropped
+    # UNLESS |Doppler| > keep_if_doppler_above (one bin = 0.1217 m/s), so a
+    # real mover passing through the zone still alerts. Zone is
+    # mount-specific: re-measure after any remount, and revisit along with
+    # the clutterRemoval A/B (the capture-side fix for the same physics).
+    # DEFAULT ON since 2026-07-09 (quad-clip A/B): with the box, central-bin
+    # median min-range 0.57-0.62 -> 1.14-1.22 m (real structure), median
+    # steer +5.8 -> 0.0 deg, jitter 1.81 -> 1.35 deg/frame, "close"-driven
+    # headings 67 -> 6 frames. Keep y_min at 0.5 alongside: restoring 0.1
+    # re-admits broader low-persistence sub-0.5 m junk whose two-bin Doppler
+    # noise (|V|~0.24) escapes the hatch (measured: v5 run).
+    # 2026-09-04 re-measurement on the POST-reassembly mount (67 afloat chunks,
+    # 38k frames, 08-19 + 08-26): the blob sits at x -0.5..-0.25, y 0.5-0.75 m
+    # (bearing ~-30 deg, 14 dead-Doppler points/frame), with a fringe past
+    # x -0.75 (0.1/frame). Two leaks fixed: (1) the hatch at one Doppler bin
+    # let TWO-bin quantisation noise (|V| = 0.243) through -- 234 open-water
+    # near-return sector rows in bins -45/-30 over 20,857 frames, 56% of the
+    # escapees on the pontoon chunk -- so it is now 0.30 m/s (a real mover
+    # inside 1.3 m at < 0.3 m/s is left to the cameras); (2) x_min widened to
+    # -1.0 and zone_y_max to 1.3 for the port fringe. NOT widened to
+    # starboard: the pontoon moors there (+15..+30 deg, ~1 m, dead Doppler
+    # because the boat is stationary relative to it) and 2,430 label-positive
+    # rows would have been blinded. The residual near returns on open water
+    # (~1 row per 100 frames per bin) are WATER-SURFACE/WAKE returns with real
+    # Doppler once the boat moves -- not self-clutter; they need a boat-speed
+    # aware feature or a persistence map (post-freeze).
+    enabled: true
+    x_min: -1.0
+    x_max: 0.25
+    zone_y_min: 0.0
+    zone_y_max: 1.3
+    keep_if_doppler_above: 0.30
+  # Frames with more returns than this are dropped. Raised 100 -> 500 on
+  # 2026-07-08: the captures/2026-07-08_16-37-01 clip has 73/590 frames
+  # past 100 REAL points (dockside, post-RadarReader fix so no garbage
+  # inflation): the old cap discarded the radar exactly on the most
+  # target-rich frames, the same failure the capture-side cap fix
+  # addressed (CLAUDE.md §8 #8). Matches ASVPROJECT_RADAR_MAX_OBJ=500.
+  max_objects: 500
+  min_objects: 1
+
+range:
+  # Monocular water-plane range per camera detection
+  # (scripts/sensor_processing/pipeline.py -> geometry.range_from_water_plane_up).
+  enabled: true
+  # Attitude sources, walked in order until one succeeds (pipeline.
+  # _range_up_vector): water_edge (seg mask), imu (BNO085, live or replayed),
+  # horizon (RANSAC line, gated below), level (always succeeds).
+  # WATER_EDGE FIRST since 2026-07-09: on the quad clip's far-boat frames
+  # (150-400, 310 boxes) the water-edge attitude produced ZERO false-near
+  # (<5 m) readings with 92% correctly >15 m, while the IMU produced 12%
+  # false-near 2-4 m readings: its pitch axis (weakly validated, r<=0.24)
+  # wobbles the water plane a few degrees, which near the horizon converts
+  # "far" into "3 m". The IMU remains second: it is the reference exactly
+  # when vision dies (night/uniform water -> no confident water edge).
+  attitude_priority: [water_edge, imu, horizon, level]
+  # When > 0 and an IMU attitude exists, a vision source (water_edge/horizon)
+  # is rejected if its implied pitch/roll deviates from the IMU's by more than
+  # this many degrees: the IMU as a sanity prior over per-frame optical
+  # references (catches shoreline/dock locks that pass their own confidence
+  # gates). 0 = off (default; byte-identical).
+  imu_gate_deg: 0.0
+  # Attitude reference, in priority order: a connected BNO085 (configs/imu.yaml)
+  # overrides everything; else the per-frame detected horizon line when its
+  # confidence clears the gate; else a level assumption (pitch=roll=0).
+  use_detected_horizon: true
+  horizon_min_confidence: 0.5   # below this, detect_horizon falls back to row 0,
+                                # which is NOT a valid reference -> use level
+  horizon_max_tilt_px: 170      # reject a detected horizon whose row at image
+                                # centre is more than this from the principal
+                                # point (~±20° tilt at this focal length). Such a
+                                # line is almost always RANSAC locking onto a
+                                # shore/dock edge, which would fake near ranges
+                                # -> fall back to level. The IMU makes this moot.
+  radar_veto:
+    # Radar-arbitrated range sanity (AuthorTwo, 2026-07-09): the radar owns
+    # 0-9 m, so a camera detection announcing a NEAR range with ZERO
+    # associated radar points: while the radar is alive and the detection
+    # sits inside radar coverage: is a physical contradiction (in practice:
+    # a water reflection / mask artefact read as near, e.g. the far
+    # pontoon). Such readings are demoted to None (">15m" display). Needs
+    # fusion.association (provides the per-detection radar match). Radar
+    # dead / empty frame / detection outside the veto window -> no veto.
+    enabled: true
+    min_m: 1.0             # only veto camera readings in this range band
+    max_m: 8.0             #   (inside the radar's reliable envelope)
+    max_bearing_deg: 50.0  # only inside the radar's usable azimuth cone
+  # Contact/bbox-bottom pixel-noise floor for the reliability check. A range
+  # is only announced when it STAYS inside max_range_m after shifting the
+  # contact point up by this many pixels: near the envelope edge one pixel
+  # is worth 1-1.5 m (range ~ 113/depression_px at this geometry), so a
+  # reading whose optimistic bound escapes the envelope is noise-dominated
+  # and reports None (">15m") instead of a falsely-confident 7-14 m.
+  # Motivated by the far-pontoon case (frames 358-369, quad clip): mask
+  # boundary dilation + the pontoon's water REFLECTION classified as
+  # obstacle put the contact ~10 px below the true waterline -> systematic
+  # 2x under-estimation that this gate correctly demotes to ">15m".
+  # 0 = off (old behaviour). Near objects unaffected (3 px barely moves a
+  # 30+ px depression).
+  uncertainty_px: 3.0
+  max_range_m: 15.0             # reliable near-field envelope. At the 0.27 m mount
+                                # height an object near the horizon sits only a few
+                                # pixels below it, so the estimate gets very
+                                # sensitive past ~15 m (validated: ~4 m boats land
+                                # within ~10%, ~10 m within ~1.6x). Beyond this the
+                                # dashboard shows ">15m" rather than a false-precise
+                                # number; the pipeline reports None (radar/IMU own
+                                # the far field).
+
+segmentation:
+  # Water/sky/obstacle segmentation (eWaSR/LRASPP-student) for robust fisheye
+  # range. DEFAULT ON since 2026-07-09: the waterline-contact range replaces
+  # the bbox bottom (fix for tilted/loose boxes over-capturing water and
+  # reading falsely NEAR: measured +2.16 m mean correction on 83% of boat
+  # boxes, range_ab_boats; range-vs-radar med |err| 69% -> 59.5%), and the
+  # water edge replaces the shoreline-prone RANSAC horizon as the range
+  # up-vector. Clips WITHOUT masks in data/seg/ take the old path unchanged,
+  # so this only activates where masks exist (generate locally at ~11 fps:
+  # scripts.eval.local_seg_masks). fp_filter and the seg-mode detector remain
+  # separately gated (see fusion.py --nav for the navigation profile).
+  enabled: true
+  seg_root: data/seg          # per-frame masks: <seg_root>/<scene>__<ts>/ts=<...>.png
+  use_for_range: true         # use the waterline-contact point (vs bbox bottom)
+  use_for_horizon: true       # use the water edge as the range up-vector
+  # Drop a precomputed mask on frames darker than fisheye.darkness_thresh,
+  # exactly as the live SegWorker refuses them (2026-09-12): a near-black
+  # frame segments as obstacle everywhere (99.6-100 % on every 2026-09-08
+  # night chunk), which poisoned thermal pseudo-labels, scorer features and
+  # the offline replay of the trials. Off = pre-2026-09-12 behaviour.
+  darkness_gate: true
+  # Water-edge line confidence gate before it overrides the RANSAC horizon /
+  # level assumption (coverage * straightness, see segmentation.horizon_from_water).
+  horizon_min_confidence: 0.4
+  contact:
+    search_pad_px: 40         # extend vertical search beyond the bbox (boxes clip the waterline)
+    min_columns: 5            # need this many columns with an obstacle->water transition
+    water_below_px: 3         # require water within this many px below an obstacle px
+    # Contact-row aggregate across the box's columns: "robust deepest",
+    # deliberately biased NEAR (safe). A brief 2026-07-09 excursion to 50
+    # (median) fixed the far-pontoon reflection under-estimation but broke
+    # genuinely-near boxes with heterogeneous contact columns: reverted.
+    # The reflection case is instead handled by range.radar_veto (a near
+    # camera reading with no radar confirmation is a contradiction) plus
+    # range.uncertainty_px.
+    percentile: 80
+  detect:
+    # Used only when fisheye.detector == segmentation.
+    min_area: 25              # drop obstacle components smaller than this (px)
+    water_edge_margin_px: 10  # keep components below (water_edge_row - margin)
+    max_components: 100
+  fp_filter:
+    # Drop blob detections lying (almost) entirely in water: glint/wave/
+    # reflection FPs (the night/open-water failure mode). Needs a mask.
+    enabled: false
+    min_obstacle_frac: 0.1    # keep a detection only if >= this frac of its box is obstacle
+
+fusion:
+  # 15-degree bins (D.2, approved by AuthorOne 2026-08-24): matches the
+  # radar's azimuth resolution; measured to lift bin-level >=2-sensor
+  # agreement 78 -> 84.3% on the quad clip (2026-07-09). 7 bins, centres
+  # -45..+45. NB: sector records from the 10-degree era are NOT
+  # bin-compatible; bin_centers_deg in each record is authoritative.
+  bin_min_deg: -52.5
+  bin_max_deg: 52.5
+  bin_step_deg: 15
+  # A bin's fused score is num_sensor_hits / num_sensors_active.
+  # By default 3 sensors active; thresholds map [1,2,3] hits -> [0.33,0.66,1.0].
+  num_sensors: 3
+  hit_threshold: 0.33      # bin counts as "detection" if score >= this
+  vote_range_gate:
+    # Range-gated voting: a camera detection whose RAW water-plane estimate
+    # (untruncated by range.max_range_m) reads beyond max_vote_range_m does
+    # not raise bin threat scores: it is still detected/reported, it just
+    # isn't a navigation threat. This is the fix for "open water ahead but
+    # fisheye+thermal still trigger": the far shoreline (100s of m) is a
+    # real visual/thermal edge, and without this gate its votes are
+    # indistinguishable from a boat at 5 m. Unknown-range detections keep
+    # voting (conservative: above-horizon back-projections, range disabled).
+    # Default OFF pending the A/B + a decision with AuthorOne (it changes nav
+    # semantics: perception recall stays; threat semantics tighten).
+    enabled: false
+    max_vote_range_m: 30.0
+  association:
+    # Pixel-level radar<->camera association (A.1 payoff; needs the measured
+    # extrinsics). Radar points are projected into each camera's undistorted
+    # image; a detection whose padded bbox captures >= min_points returns is
+    # "confirmed" (object-level cross-sensor agreement, exported per bin as
+    # FusionResult.confirmed) and takes the radar range instead of the
+    # monocular water-plane estimate (use_radar_range; the monocular value
+    # moves to mono_ranges for telemetry). Default ON since 2026-07-09
+    # (was off): the radar range on confirmed detections + the radar_veto
+    # contradiction check both need the per-detection match, and the
+    # association A/B showed no downside (confirmed bins are pure signal).
+    enabled: true
+    max_px: 32             # bbox padding (px) for the point-in-box gate (fisheye)
+    # The pad absorbs ANGULAR projection error, so a pixel pad tuned on the
+    # 864-px fisheye (32 px ~ 4.3 deg) is ~13 deg on the 160-px thermal:
+    # wider than a whole 10-deg fusion bin, so thermal blobs were confirming
+    # bins with radar returns that belong 1-2 bins away (quad clip frame 88:
+    # an open-water 0-deg bin "confirmed" by the dock's returns at
+    # +10..+20 deg, min_range 2.08 borrowed). 12 px = the same 4.3-deg
+    # tolerance at the thermal's ~2.81 px/deg. Full-clip A/B (2026-08-05,
+    # 572 frames): confirmed-bin instances 204 -> 157, the share without a
+    # same-bin radar vote 26% -> 18% (residual = honest bin-boundary
+    # quantisation at +-4.3 deg).
+    thermal_max_px: 12     # bbox padding (px) for the thermal gate
+    min_points: 1          # radar returns inside the gate to confirm
+    range_agg: min         # min | median of matched radar forward ranges
+    # Confirmation semantics (2026-08-05, follow-up to the thermal pad fix).
+    # The gate tests PROXIMITY in image space: necessary but not sufficient
+    # for "same object", and thermal has no range of its own to sanity-check
+    # a pairing. Quad clip frame 88 (post-pad-fix): an open-water thermal
+    # blob at +3 deg and the far-shore band at +4.5 deg were "confirmed" by
+    # the dock cloud's fringe at +6..+9 deg: mechanically valid, physically
+    # wrong. Two tightenings, both default on:
+    # - confirm_anchor "radar": confirmation marks the bins the matched
+    #   returns actually OCCUPY (per point; min_range per bin from the
+    #   nearest matched return in it). Extended objects keep every
+    #   genuinely-backed bin (the dock detection at +34.5 deg marks
+    #   +10/+20/+30, matching its return spread); nothing is marked on
+    #   borrowed evidence. "detection" = legacy centre-bin anchoring.
+    # - confirm_same_bin: additionally require the detection's own bin to
+    #   be among the occupied bins; a FULLY cross-bin match (the frame-88
+    #   0-deg case) confirms nothing. The association still supplies the
+    #   per-detection radar range either way.
+    confirm_same_bin: true
+    confirm_anchor: radar  # radar | detection
+    use_radar_range: true  # associated detections take the radar range
+    # Reject a radar match whose range is < this fraction of the camera's
+    # own raw estimate for the box (or when the camera reads "above
+    # horizon" = far): such a return belongs to a FOREGROUND object the
+    # pixel gate swept up, not this detection: e.g. dock clutter at
+    # 2-3 m projecting inside far edge-pillar boxes (frames 0-18, quad
+    # clip), which announced 1.9-2.9 m for pillars actually beyond 15 m.
+    # The return still counts for radar_hits (it is real) and the bin's
+    # min_range. 0 = off.
+    range_compat_ratio: 0.5
+    # Instance-mask pixel attribution (2026-08-24): where a YOLOv8-seg
+    # instance polygon (data/det_seg, normalised, undistorted-fisheye
+    # space) covers a detection, the pixel gate becomes point-in-polygon
+    # (dilated by instance_margin_px) instead of the padded bbox: this is
+    # the structural fix for tall edge boxes sweeping up foreground
+    # returns (the 2-3 m dock-clutter-in-pillar-boxes failure that
+    # range_compat_ratio mitigates box-side). Detections no instance
+    # covers fall back to the box gate, so coverage gaps degrade to the
+    # old behaviour. Fisheye only (no polygons in the thermal frame).
+    # Default OFF: (1) the polygons are OFFLINE artefacts (GPU/laptop
+    # YOLOv8-seg, no Pi runtime) covering only frames someone has run
+    # inference on: 259/572 quad-clip frames, boats/buoys only, so the
+    # dock/pillar STRUCTURE boxes the compat rule exists for mostly have
+    # no instance and keep the box gate anyway; (2) the LaRS-domain
+    # detector is "useful visualization, not load-bearing" (CLAUDE.md
+    # §11) pending an on-domain fine-tune; (3) measured effect at the
+    # defaults is a precision refinement with byte-identical behaviour
+    # wherever masks are absent. Flip on for replay analysis where
+    # data/det_seg coverage exists; revisit the default when typed
+    # detection ships on-Pi (docs/plans/fusion_scoring_training.md).
+    # Numbers: docs/history/2026-08-24_instance_association.md.
+    use_instance_masks: false
+    # Polygon dilation (px). Measured on the quad clip (2026-08-24, 660
+    # box-matched returns over 162 polygon-covered detections): outside-
+    # polygon returns that are range-CONSISTENT with the detection's
+    # inside-polygon cluster (mask undersegmentation: same object) sit at
+    # p50 10.9 px outside; range-INconsistent (other-object) returns at
+    # p50 22 px, with an admission knee at ~24 px (22.6% admitted at
+    # 16 px -> 52.8% at 24). End-to-end the 17 verification proxies are
+    # flat across 8-16 px, so 12 px = mid-plateau: keeps ~55% of the
+    # same-object leakage, admits ~19% of other-object returns (which
+    # range_compat_ratio still backstops). Sweep + per-point dump:
+    # scripts.eval.instance_assoc_ab --sweep-margins.
+    instance_margin_px: 12
+    instance_root: data/det_seg
+  scorer_smoothing:
+    # Per-bin temporal persistence for the calibrated learned score
+    # (fusion.py --scorer). The per-frame scorer is memoryless, so
+    # p_obstacle flickers on one-frame evidence dropouts. Smoothing:
+    #   p_smooth = max(p_raw, exp(-dt / decay_time_s) * p_prev)
+    # Rises are INSTANT (a fresh detection is never smoothed away: the
+    # smoothed series crosses every threshold on the same frame as the raw
+    # one, verified synthetically + on both eval clips); only the decay is
+    # damped, with dt taken from the actual frame timestamps (~3 fps but
+    # drifting). Timestamp gaps > gap_reset_s (chunk rolls, stalls) or
+    # backwards jumps reset state to the raw score. Emitted as the ADDITIVE
+    # p_obstacle_smooth field next to p_obstacle; default OFF = JSONL
+    # byte-identical. decay_time_s 2.0 chosen 2026-08-24 from the two-clip
+    # sweep (0.5/1/2/3 s, scripts.eval.scorer_smoothing_eval): on the
+    # active 07-08 quad clip it cuts short dropouts (<= 2-frame dips of an
+    # above-threshold bin) by 72% @0.3 / 49% @0.5 and mean per-bin |dp| to
+    # 0.78x, with a ghost tail of only ~1.1 frames past raw; 1 s still
+    # loses a 2-frame dropout of a p=0.7 target at the 0.5 threshold
+    # (0.7*exp(-0.66/1) = 0.36 vs 0.50 at 2 s), 3 s bought little more
+    # suppression for 1.3-1.9-frame tails. Onset delay measured 0 at every
+    # tau x threshold on both clips, as constructed. The symmetric EMA
+    # alternative smooths 2-4x better on |dp| but delays 60-100% of 0.5/0.7
+    # onsets on the quad clip: never ship it on the nav path
+    # (docs/history/2026-08-24_scorer_smoothing.md).
+    enabled: false
+    decay_time_s: 2.0      # exponential decay time constant (seconds)
+    gap_reset_s: 5.0       # timestamp jump beyond this resets the state
+
+motion:
+  # Cross-frame radar association: scripts/sensor_processing/motion.py.
+  # Since 2026-07-06 the capture writes the TLV's radial Doppler as a
+  # `V` CSV column; when present it wins per point and the NN tracker
+  # only fills gaps (velocity_source: doppler/mixed). On older CSVs the
+  # tracker remains the sole source. Knobs below apply to the tracker.
+  gate_m: 0.5              # max NN distance to associate frames
+  max_dt_s: 0.5            # ignore prior frame older than this
+  # Below this closing speed -> TTC = null. Raised 0.05 -> 0.15 on
+  # 2026-07-09: the profile's Doppler resolution is 0.1217 m/s, so eps
+  # below one quantization bin lets single-bin noise emit TTCs: the
+  # STATIC dockside quad clip produced 1105 phantom per-bin TTCs
+  # (median 1.4 s) at eps 0.05; 52% of per-bin closings sat in the
+  # one-bin band 0.05-0.13 m/s. 0.15 clears one bin while staying far
+  # below real approach speeds (~0.5-2 m/s at sailing pace).
+  ttc_eps_mps: 0.15
+  ttc_cap_s: 60.0          # treat anything past this as effectively infinite
+  targets:
+    # Per-target motion estimation (scripts/sensor_processing/target_motion.py):
+    # cluster the filtered radar cloud into objects, track them across frames,
+    # and combine Doppler radial speed with cross-frame bearing-rate into a
+    # 2-D boat-frame velocity + closing/crossing/diverging state + CPA per
+    # target. The per-bin velocity/TTC above is radial-only and therefore
+    # blind to the COLREG crossing case (near-zero Doppler while give-way);
+    # this block is the missing tangential half.
+    # Default OFF: pipeline output is byte-identical without it. Emitted as
+    # the additive `targets` JSONL field (sector protocol v1.2) and as
+    # target_* feature columns for the fusion scorer (consumed at Phase 3).
+    enabled: false
+    # Intra-frame clustering gate (single-linkage, XY plane). At 5 m one
+    # 15-deg azimuth cell is ~1.3 m of lateral spread, and a multi-metre
+    # target (canoe/boat) fragments below ~1 m. Validated 2026-08-24 on the
+    # 2026-08-19 crossing + rocked clips (marine scenes are sparse: the
+    # subject forms one clean cluster; docs/history/2026-08-24_target_motion.md).
+    # KNOWN LIMIT: dense indoor clutter (2026-07-06 bench pacing, NN spacing
+    # ~5 cm) chains the whole room + mover into one cluster, diluting the
+    # median Doppler toward the threshold: classification signs stay right,
+    # magnitudes hug closing_min. Not the marine operating condition;
+    # revisit only if on-water scenes ever show that density.
+    cluster_gate_m: 1.0
+    # Frame-to-frame track<->cluster association gate on the EMA centroid.
+    # Motion contributes <= ~0.2 m/frame at sailing speeds (1-2 m/s, 10 Hz);
+    # the gate mostly absorbs centroid wobble as returns migrate across an
+    # extended target. 3x the RadarPointTracker per-point gate (0.5); held
+    # the crossing track across the 2026-08-19 transit without an id switch.
+    assoc_gate_m: 1.5
+    # Confirmation / drop counters: house tracker defaults (SectorTracker
+    # and BBoxTracker both ship 3/5). A target reports only after min_hits
+    # consecutive-ish frames, and dies after max_age misses.
+    min_hits: 3
+    max_age: 5
+    # EMA weight on the current frame for position + radial speed
+    # (FreeSpaceSmoother pattern and its default 0.5).
+    ema_alpha: 0.5
+    # Bearing-rate = least-squares slope over this window of (t, bearing)
+    # samples. 2 s = ~20 radar frames: with ~1 deg per-frame bearing noise
+    # the LS slope noise is ~0.4 deg/s (=> ~0.03 m/s tangential at 5 m),
+    # while staying responsive inside the 3-6 s warning envelope the 9 m
+    # radar range affords (CLAUDE.md platform notes). Requires
+    # rate_min_samples samples spanning >= half the window.
+    rate_window_s: 2.0
+    rate_min_samples: 5
+    # Radial closing/diverging threshold: one Doppler quantization bin is
+    # 0.1217 m/s (same measurement as ttc_eps_mps above), so 0.15 clears
+    # single-bin noise while staying far below real approach speeds.
+    closing_min_mps: 0.15
+    # Tangential threshold for "crossing". MEASURED 2026-08-24
+    # (target_motion_eval, docs/history/2026-08-24_target_motion.md):
+    # the marine static noise floor: deliberately rocked box (+-13 deg
+    # pitch) against a static dock scene: is |v_tangential| p95 = 0.145 m/s
+    # with ZERO false crossings at this threshold; the 2026-08-19 crossing
+    # subject (person wading, ~0.45 m/s) measures |v_tangential| p50
+    # 0.536 m/s. 0.3 sits 2.1x above the rocked floor and 44% below the
+    # crossing signal: crossing precision 1.000 / recall 0.806 on the GT
+    # transit. (The bench pacing scene's churn-inflated p95 0.35 can graze
+    # it: dense-clutter caveat under cluster_gate_m.)
+    crossing_min_tangential_mps: 0.3
+    # Ego-rotation correction: yaw-stabilise the tracked bearing before the
+    # rate fit so a turning boat doesn't read every static target as
+    # crossing. Ego TRANSLATION is deliberately not subtracted (collision
+    # geometry lives in relative velocity).
+    # DEFAULT OFF. History (both measured, docs/history/2026-08-24_target_motion.md):
+    #  - RAW RVC yaw is gimbal-aliased on this mount (rock -> |v_t| p95
+    #    0.145 -> 0.730, 6/23 fake crossings, crossing recall 0.806 -> 0.613).
+    #  - The 2026-08-24 follow-up shipped the composed camera-frame heading
+    #    (imu_replay.camera_heading_from_rvc; the replay/live yaw is now that
+    #    signal under attitude_source: rotation). It FIXES the aliasing --
+    #    rocked clip |v_t| p95 0.730 -> 0.120 (BETTER than yaw-blind 0.145),
+    #    fake crossings 6 -> 0 -- but on the crossing clip recall reads 0.774
+    #    vs 0.806 yaw-blind: the corrected |v_t| (p50 0.536 -> 0.486, same
+    #    spread) sits closer to the subject's physical ~0.39-0.45 m/s, i.e.
+    #    nearer the 0.3 threshold, and 1-2 warm-up frames flip to static.
+    #    Neither GT clip contains a genuine sustained turn (the case the
+    #    correction exists for), so the flip stays earned-not-granted: turn
+    #    ON after a deliberate-turn clip shows the benefit (target_motion_eval
+    #    --yaw-source rotation reports the pair + the bearing-vs-yaw r).
+    use_imu_yaw: false
+    # +1 validated on the rocked clip with the composed heading (p95 0.120
+    # vs 0.188 for -1); matches the bearing-sense (right positive) contract
+    # in camera_heading_from_rvc. Re-check on a real-turn clip.
+    imu_yaw_sign: 1.0
+    # Frame gap beyond which differentiating is meaningless: tracks reset
+    # (same policy + value as the point tracker's max_dt_s above).
+    max_dt_s: 0.5
+    # --- Cross-sensor track identity (scripts/sensor_processing/
+    # track_identity.py, 2026-08-25). Pairs a BBoxTracker camera track
+    # with a radar target id by SUSTAINED per-frame association agreement:
+    # detection D agrees with target T when D's matched radar returns
+    # (fusion.association point indices) intersect T's cluster points.
+    # Default OFF (byte-identical); pairing evidence needs
+    # fusion.association.enabled (on by default) - without it camera
+    # tracks still get ids but no pairs can form. Fisheye only.
+    identity:
+      enabled: false
+      # Form a pair after pair_min_hits agreeing frames within the last
+      # pair_window co-observed frames (N-of-M; the house 3/5 tracker
+      # numbers - SectorTracker/BBoxTracker/targets min_hits/max_age).
+      # ~1 s of agreement at the captures' effective 3 Hz cadence.
+      pair_min_hits: 3
+      pair_window: 5
+      # Break after this many CONSECUTIVE co-observed frames without
+      # overlap. Frames where either side is unobserved count neither
+      # way: a radar dropout must not divorce the pair (the 2026-08-19
+      # crossing GT loses the subject's radar for 4 s mid-transit;
+      # surviving that is the layer's value proposition).
+      break_misses: 5
+      # Radar returns shared between the detection's pixel gate and the
+      # target's cluster to count a frame as agreeing (same floor as
+      # fusion.association.min_points).
+      min_overlap_points: 1
+      # A pair whose radar target has not reported for this many frames
+      # is dropped (~5 s at 3 Hz: past the camera-sustain window, so a
+      # sustained track is never killed by its own dropout).
+      stale_after: 15
+      # Camera-side BBoxTracker knobs (house defaults) + the per-side box
+      # pad: blob boxes are small (~20 px) and a crossing subject moves
+      # ~7 px/frame at 3 fps, which drops unpadded IoU near the 0.3 gate;
+      # +8 px/side keeps track continuity.
+      bbox_min_hits: 3
+      bbox_max_age: 5
+      bbox_pad_px: 8
+      # EMA weight for the learned radar-camera bearing offset (target
+      # bearing minus detection bearing on agreeing frames; the
+      # 2026-07-09 association A/B measured a few degrees of systematic
+      # bias between the bearing models, so the offset is estimated per
+      # pair rather than assumed zero).
+      offset_alpha: 0.3
+    # Camera bearing as a SECOND observation for paired targets
+    # (2026-08-25, needs identity.enabled). Default OFF: byte-identical
+    # without it. Effects: (1) paired camera bearings accumulate in a
+    # separate per-track window, and when the radar bearing window goes
+    # stale (newest sample older than half rate_window_s) the camera
+    # window supplies the bearing-rate (TargetState.rate_source:
+    # radar/camera/radar_stale); (2) a paired track the radar misses is
+    # sustained from the camera (bearing from the detection, range
+    # dead-reckoned by the held v_radial) and keeps reporting - filling
+    # the radar's documented mid-transit dropouts. Sustained snapshots
+    # carry n_points 0 + empty point_indices (honest provenance).
+    camera_bearing_rate: false
+    # Sustain a radar-silent paired track for at most this long past its
+    # last radar hit (the measured 2026-08-19 dropout is 4 s; 6 s covers
+    # it with margin while bounding the dead-reckoned range drift), and
+    # only while the camera observation is at most camera_fresh_s old
+    # (~3 camera frames at 3 fps).
+    camera_sustain_max_s: 6.0
+    camera_fresh_s: 1.0
+
+heading:
+  # Heading recommendation: scripts/sensor_processing/heading.py.
+  # Segmentation free-space (Phase 1): when true AND a water mask is present,
+  # the per-bearing navigable free-space (segmentation.free_space_profile)
+  # augments the block threat field: a near/blocked bearing raises its cost.
+  # Default off so the recommender is byte-identical without it.
+  use_free_space: false
+  free_space_max_range_m: 15.0   # normalises free distance -> threat amplitude
+  free_space_smoothing_alpha: 0.5  # EMA on the free-space profile (1.0 = off)
+  candidate_step_deg: 1.0  # one candidate per degree
+  alert_threshold: 0.33    # bins below this contribute zero to the threat field
+  blocked_threshold: 0.66  # bins with score >= this are penalised at full amplitude
+  block_sigma_deg: 12.0    # Gaussian falloff radius around blocked bins
+  max_swing_deg: 30.0      # course-change normalisation
+  weights:
+    block: 1.0
+    close: 0.3
+    ttc: 0.6
+    course: 0.2
+    nogo: 1.0              # stubbed at 0 cost until V.3 IMU/wind lands
+  tied_gap_frac: 0.05      # min-cost vs next-best ratio; below = ambiguous
+  tied_min_separation_deg: 30.0
+  range_eps_m: 0.5         # avoid 1/0 in close-proximity term
+  ttc_eps_s: 0.5
+  # When the residual block-threat at the cheapest candidate is at or
+  # above this value, abstain entirely ("no safe option") rather than
+  # recommend swinging hard to the FOV edge. Tuned against the Boats
+  # clip where central fisheye dominance flattens the cost curve.
+  abstain_cost: 0.3
+  # Temporal smoothing on the recommended heading. Applied by
+  # HeadingSmoother in heading.py: dashboards + fusion.py --out use
+  # this. The window is in frames; at the radar's 10 Hz nominal
+  # cadence, 9 frames ≈ 0.9 s of integration.
+  smoothing_window: 9
+  smoothing_min_samples: 3

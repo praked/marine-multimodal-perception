@@ -1,0 +1,33 @@
+# GPU-node dependencies for eWaSR water-segmentation training + inference
+# (scripts/gpu_seg/, InstTwo GPU run on gpu-node). Installed into a scratch venv by
+# scripts/gpu_seg/setup_scratch_seg.sh.
+#
+# torch + torchvision are installed SEPARATELY (and FIRST) by the setup script
+# from the CUDA 11.8 wheel index, so they are intentionally NOT listed here:
+#   pip install torch==2.0.1 torchvision==0.15.2 --index-url .../whl/cu118
+#
+# eWaSR (tersekmatija/eWaSR) targets the PyTorch-Lightning 1.x API
+# (pl.Trainer(gpus=...)), which was removed in PL 2.0: so PL is pinned to the
+# last 1.x release, with a matching torchmetrics. timm is pinned to eWaSR's
+# requirement. numpy is held <2 for torch 2.0.x / albumentations compatibility.
+
+# pytorch-lightning 1.9.x's lightning_fabric imports pkg_resources and calls the
+# deprecated declare_namespace(), removed in setuptools>=81: and uv venv does
+# not seed setuptools at all. Pin a setuptools that still provides both.
+setuptools<81
+pytorch-lightning==1.9.5
+torchmetrics==0.11.4
+timm==0.6.5
+# eWaSR passes heterogeneous masks (one-hot segmentation HxWx3 + imu_mask HxW)
+# to A.Compose(masks=[...]). albumentations>=1.4 np.stack()s them and fails on
+# the shape mismatch; 1.3.1 keeps them as a list (eWaSR's era).
+albumentations==1.3.1
+numpy<2
+Pillow>=9.0
+tqdm
+pyyaml
+tensorboard
+# ONNX export path (export.py) for the eventual Pi/edge deployment.
+onnx
+onnxruntime
+onnxsim

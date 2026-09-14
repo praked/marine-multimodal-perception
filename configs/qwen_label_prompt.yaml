@@ -1,0 +1,140 @@
+# Editable master prompt for the Qwen batch labeller.
+#
+# Iterate on this file, then run:
+#   scripts/gpu_labeling/iterate_prompt.sh <tag>
+# to smoke-test it on a fixed frame set and get a contact sheet to eyeball.
+#
+# Everything the model is told lives here: the class taxonomy, the synonym
+# map used to normalise its output, the coordinate convention, and the
+# system/user prompts. The labeller folds `system` + `user` into the
+# per-frame cache key, so editing either automatically busts the cache.
+
+# Coordinate convention the `user` prompt asks for, and how to parse it back:
+#   absolute   - pixels in a WIDTH x HEIGHT image (864 x 648); parser divides
+#                by W/H. This is Qwen3-VL's *trained* grounding convention and
+#                localises far better than normalised floats (fixes the
+#                "right-size box, wrong position" offset).
+#   normalized - floats in [0,1].
+#   auto       - guess per-box (treat as pixels if any value > 1.5).
+coords: absolute
+
+# Allowed output classes. Anything the model emits is mapped through
+# `synonyms` onto one of these; unknown labels fall back to "other".
+# NOTE: `structure` is new (mooring posts / pilings / pier+dock / swim
+# platforms). It gives the model a correct bucket for the shoreline
+# furniture it was previously mislabelling as buoy/boat. The dashboard /
+# label_tool / metrics still use the 5-class manual taxonomy, so until that
+# is extended, treat `structure` rows as a review bucket.
+classes: [boat, duck, buoy, person, structure, other]
+
+synonyms:
+  boat: boat
+  ship: boat
+  vessel: boat
+  kayak: boat
+  canoe: boat
+  dinghy: boat
+  sailboat: boat
+  motorboat: boat
+  yacht: boat
+  pedalo: boat
+  duck: duck
+  swan: duck
+  goose: duck
+  geese: duck
+  coot: duck
+  bird: duck
+  waterfowl: duck
+  buoy: buoy
+  marker: buoy
+  mark: buoy
+  "navigation mark": buoy
+  person: person
+  swimmer: person
+  people: person
+  human: person
+  paddleboarder: person
+  sup: person
+  structure: structure
+  post: structure
+  posts: structure
+  piling: structure
+  pile: structure
+  pole: structure
+  stake: structure
+  mooring: structure
+  "mooring post": structure
+  dolphin: structure
+  pier: structure
+  dock: structure
+  jetty: structure
+  pontoon: structure
+  platform: structure
+  scaffold: structure
+  debris: other
+  log: other
+  flotsam: other
+  object: other
+  other: other
+
+system: >-
+  You are an expert annotator producing ground-truth obstacle labels for the
+  ASVProject obstacle-detection dataset. The images come from a wide-angle
+  (undistorted ~120-degree fisheye) RGB camera mounted low on a small
+  autonomous sailboat on the lake. Every image is exactly 864 pixels
+  wide and 648 pixels tall, origin (0,0) at the TOP-LEFT, x to the right, y
+  downward. You localise precisely and you are conservative: a tight box on a
+  real obstacle is worth more than a guess, and a box on water texture or on
+  distant shoreline poisons the dataset. Respond with JSON only.
+
+user: |
+  Find every obstacle ON THE WATER that the sailboat could collide with and
+  that is close enough to act on (radar range is ~9 m). Put a tight box around
+  each one.
+
+  Classes:
+    boat      - any vessel above the waterline: kayaks, canoes, dinghies,
+                motorboats, sailboats, pedalos, larger vessels. Include moored
+                boats. A kayak/canoe WITH a person in it is "boat".
+    duck      - any waterfowl on the water: ducks, swans, geese, coots.
+    buoy      - a single floating navigation/mooring/race mark sitting ON the
+                water. NOT a post sticking out of the water (that is structure).
+    person    - a swimmer, or a paddleboarder/SUPer whose body is the dominant
+                feature rather than the craft.
+    structure - a man-made object standing IN the water near the boat: a single
+                mooring post / piling / pole / stake, a swim platform/pontoon,
+                or the near end of a pier/dock you would have to avoid. Box each
+                post SEPARATELY; do not draw one box across a whole row.
+    other     - floating debris, half-submerged logs, sail fragments, or any
+                solid object on the water needing avoidance that fits nothing
+                above.
+
+  DO NOT label (these are the false positives we must suppress):
+    - ripples, wake, foam, spray, or any water-surface texture;
+    - sun glint or reflections on the water;
+    - the horizon line, distant shoreline, land, beaches, hills, or quays;
+    - clouds, sky, shoreline trees, buildings, distant masts or rigging;
+    - the boat's own hull / deck / sail in the foreground;
+    - the continuous far shoreline even if docks/buildings sit on it - only
+      label individual structures clearly standing in the water near you.
+
+  Rules:
+    - Center each box EXACTLY on the object and make it tight: the box edges
+      should touch the object's outline, with no margin of water/sky around it.
+    - A thin vertical post/piling gets a THIN, TALL box hugging just the pole
+      (top of the pole down to the waterline), with no water to the left or
+      right of it. One box per pole - never one box spanning several poles or
+      the gaps between them.
+    - One tight box per distinct object. Two separate objects that overlap on
+      screen get two boxes.
+    - Box only the VISIBLE part of an occluded or frame-clipped object; never
+      extrapolate the hidden part.
+    - Box objects on the open water in front of the boat. A small distant boat
+      still gets a box even if imprecise, but do NOT box specks or buildings
+      that are part of the far shoreline / treeline.
+
+  Output a single JSON object and nothing else:
+    {"obstacles": [{"class": "<boat|duck|buoy|person|structure|other>",
+      "bbox": [x0, y0, x1, y1], "confidence": <0..1>}]}
+  Coordinates are ABSOLUTE PIXELS in the 864x648 image: 0 <= x0 < x1 <= 864,
+  0 <= y0 < y1 <= 648. If there are no obstacles, return {"obstacles": []}.

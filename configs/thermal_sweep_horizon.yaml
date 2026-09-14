@@ -1,0 +1,30 @@
+# Thermal tuning sweep: stage 3 (horizon overrides + mog2 sanity), 2026-07-09.
+# Fixed at the stage-2 fp<=2 candidate (object_thresh 80, minArea 4,
+# median3 + CLAHE 4.0/4); sweeps the thermal-specific horizon overrides the
+# 160x120 LWIR frame has never had tuned, plus a mog2 A/B (expected to
+# collapse static recall: scorer self-test as much as a candidate).
+
+triplet: data/captures/2026-07-08/2026-07-08_16-37-01
+labels: labels/qwen/det_2026-07-08.jsonl
+tol_deg: 6.0
+skip_frames: 19
+gt_dilate_frames: 7
+
+grid:
+  thermal.object_thresh: [80]
+  thermal.blob.minArea: [4]
+  thermal.preprocess:
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 4.0, tile: 4}}
+  thermal.horizon:
+    - null                                            # shared block as-is
+    - {canny_low: 30, canny_high: 100}
+    - {canny_low: 70, canny_high: 200}
+    - {inlier_thresh: 3.0}
+    - {confidence_thresh: 0.3}
+    - {confidence_thresh: 0.7}
+    - {canny_low: 30, canny_high: 100, inlier_thresh: 3.0}
+  thermal.background:
+    - {method: running_mean}
+    - {method: mog2, mog2: {history: 90, var_threshold: 16.0, learning_rate: -1}}
+    - {method: mog2, mog2: {history: 45, var_threshold: 8.0, learning_rate: -1}}

@@ -1,0 +1,99 @@
+# Fusion-scorer configuration (plan: docs/plans/fusion_scoring_training.md)
+#
+# Everything here concerns the LEARNED scorer + threat composition; the
+# rule-based incumbent stays governed by detection.yaml until it is deleted
+# at protocol v2.
+
+targets:
+  # ±frames a label supports (GroundingDINO flicker; thermal_gt_eval's ±7).
+  dilation_frames: 7
+  # Bearing tolerance beyond the half-bin (null = half a bin).
+  tolerance_deg: null
+  # Labels whose monocular water-plane range reads beyond this (or above
+  # the horizon) are perception-GT only, excluded from nav-score training
+  # (y_nav). Matches fusion.vote_range_gate. Confirmed AuthorTwo 2026-07-17.
+  max_relevant_range_m: 30.0
+
+evidence:
+  # v0 per-sensor evidence squashings for the gated mixture (v1a):
+  # e_s = tanh(raw / scale). Chosen so typical single-object signals land
+  # mid-range (seg frac ~0.05 dockside, 1-2 thermal blobs, ~5 radar pts on
+  # a real target). Sweepable; the GBT (v1b) sees the raw columns instead.
+  fisheye_seg_frac_scale: 0.05
+  thermal_count_scale: 2.0
+  radar_points_scale: 5.0
+
+context:
+  # Day/dusk/night strata + context features use civil-twilight bounds on
+  # sun elevation (deg): day > +6, dusk/dawn in [-6, +6], night < -6.
+  twilight_deg: 6.0
+
+urgency:
+  # threat = p_obstacle * urgency(range, ttc, severity)
+  # range/ttc terms are each clip(1 - x/cap, 0, 1); urgency takes the MAX
+  # of the two (a fast closer far away is as urgent as a near static),
+  # scaled by class severity, floored so a detection with unknown
+  # range/ttc still carries some urgency (unknown != safe).
+  range_cap_m: 15.0        # = range.max_range_m envelope
+  ttc_cap_s: 60.0          # = motion.ttc_cap_s
+  unknown_floor: 0.3
+  motion:
+    # CPA (closest-point-of-approach) urgency term for crossing targets:
+    # the range/ttc terms are radial-only, so a crossing boat that will
+    # pass close reads low-urgency until it is nearly upon us. When a
+    # tracked target (motion.targets) predicts a CPA, the term
+    # (1 - cpa/cpa_cap_m) * (1 - t_cpa/t_cpa_cap_s) joins the max():
+    # high only when the predicted miss distance is SMALL and SOON, and
+    # it can only raise urgency, never lower it.
+    #
+    # POLICY CONTEXT (D.2, approved by AuthorOne 2026-08-24): the COLREG
+    # posture mapping in docs/plans/d2_protocol_decisions.md §2 is the
+    # ruling this term serves — "crossing, CPA < cap" is what triggers the
+    # give-way / stand-on / treat-as-head-on postures, so cpa_cap_m is a
+    # COLREG policy knob, not just an urgency shape. The tracker side is
+    # validated (crossing P 1.000 / R 0.806 on the 2026-08-19 wading
+    # transit; zero false crossings on the rocked static clip — see
+    # docs/history/2026-08-24_target_motion.md).
+    #
+    # ENABLEMENT CRITERION (do not flip on judgement alone): a CLOSE-CPA
+    # ground-truth clip — a target that actually passes near (CPA well
+    # under cpa_cap_m) — scored through scripts/eval/target_motion_eval.py.
+    # Neither existing GT clip covers that regime (the wading transit
+    # crosses at 6-8.7 m; the rocked clip is static), so today the cap has
+    # never been exercised where it matters. When that clip exists:
+    # trace cpa_cap_m to its measured CPA, re-run target_motion_eval, and
+    # only then set enabled: true.
+    enabled: false
+    # Miss distances beyond this contribute nothing. PROVISIONAL: half a
+    # boat length below the ~9 m radar envelope felt right at design time;
+    # trace to a close-CPA GT clip's actual CPA before shipping (see the
+    # enablement criterion above). Also the CPA cap in the D.2 §2 posture
+    # table — ownership (us vs autopilot) was left open in that ruling.
+    cpa_cap_m: 5.0
+    t_cpa_cap_s: 60.0      # = motion.ttc_cap_s (same "effectively never")
+  # SEVERITY TABLE — interim policy set by AuthorTwo 2026-08-22: humans first,
+  # then any living being, then the order that limits overall damage
+  # (boats carry people and both hulls lose; structure is hard/immovable so
+  # it outranks a sacrificial buoy). Encodes safety policy, not data.
+  # Worth a AuthorOne sanity pass at the D.2 conversation, but no longer gates
+  # Phase-3 training. Applied only when class evidence exists;
+  # unknown class = 1.0 (neutral: could be anything, treat as worst case).
+  severity:
+    person: 1.0
+    animal: 0.8
+    duck: 0.8
+    boat: 0.6
+    structure: 0.4
+    other: 0.5
+    float: 0.3
+    buoy: 0.3
+    unknown: 1.0
+
+train:
+  seeds: [0, 1, 2]         # multi-seed means are mandatory (thermal lesson)
+  epochs: 300
+  learning_rate: 0.05
+  l2: 1.0e-3
+  # Operating threshold used for headline P/R/F1 rows in reports (the
+  # sweep is always reported alongside).
+  report_threshold: 0.5

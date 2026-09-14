@@ -1,0 +1,104 @@
+# Sensor extrinsics: MEASURED 2026-07-07 (photogrammetry + calliper).
+#
+# All transforms are 4x4 homogeneous matrices that map points expressed
+# in the SOURCE frame to the DESTINATION frame as their key implies.
+# Convention:
+#   - Radar frame (TI):     X = lateral (right +), Y = forward range +, Z = up +
+#   - Camera frame (OpenCV): X = right, Y = down, Z = forward (along optical axis)
+# The rotation block is the pure axis swap (all three sensors face forward
+# off the same flat mount plate: no relative rotation):
+#   camera.X =  radar.X,  camera.Y = -radar.Z,  camera.Z = radar.Y
+# The translation column is the RADAR ANTENNA CENTRE expressed in the
+# camera's frame, metres.
+#
+# How the numbers were obtained (docs/reference/extrinsics.md):
+# fronto-parallel lid photo (IMG_9505) + calliper-measured bolt rectangle
+# (outer-outer 107.5 x 60.3 mm, M3 caps) -> homography -> in-plane offsets,
+# +-1 mm, physically sanity-checked. Reference points: radar = centre of the
+# AWR1843BOOST antenna patch region; fisheye = lens barrel centre; thermal =
+# the Lepton lens dome. Forward (depth) offsets are AuthorTwo's approximate
+# hand measurements (lens tips ~4.3 / ~5.0 mm forward of the radar board
+# face): coarse, but negligible at ranges >= 1 m.
+#
+# MEASURED GEOMETRY IN BOX AXES (orientation-independent: re-derive any
+# mounting from these): along the 60.3-bolt axis / along the 107.5-bolt
+# axis / forward, in mm, camera -> radar:
+#   fisheye -> radar : +51.6 / -2.0  / -4.3
+#   thermal -> radar : +50.4 / +60.4 / -5.0
+#   (fisheye -> thermal: +1.2 / -62.3 / +0.7: the consistency cross-check)
+#
+# CURRENT MOUNTING (confirmed by AuthorTwo 2026-07-07): 60.3 axis vertical,
+# antennas up, FISHEYE ABOVE THERMAL. In boat axes (right/forward/up),
+# camera -> radar: fisheye (-0.0516, -0.0043, -0.0020),
+#                  thermal (-0.0504, -0.0050, +0.0604).
+#
+# IF THE BOX IS REMOUNTED (90/180 deg rotations), swap in the matching
+# translation columns below (t = [d_right, -d_up, d_forward]) and
+# RE-MEASURE camera_height_m: heights change with orientation:
+#   orientation                      t_fisheye (x,y,z)            t_thermal (x,y,z)
+#   fisheye above thermal (CURRENT): (-0.0516, +0.0020, -0.0043)  (-0.0504, -0.0604, -0.0050)
+#   thermal above fisheye (180deg):  (+0.0516, -0.0020, -0.0043)  (+0.0504, +0.0604, -0.0050)
+#   radar above the cameras:         (-0.0020, -0.0516, -0.0043)  (+0.0604, -0.0504, -0.0050)
+#   radar below the cameras:         (+0.0020, +0.0516, -0.0043)  (-0.0604, +0.0504, -0.0050)
+#
+# REMOUNT RESOLVED 2026-08-14. The 2026-07-15 boat mount had the box rotated
+# 90deg (radar on top, cameras side-by-side); the workshop has since done the
+# mount work and the box is reassembled in its ORIGINAL day-1 orientation
+# (antennas up, fisheye above thermal, radar to port). So the matrices below,
+# the "fisheye above thermal" columns, are CORRECT AS COMMITTED: no column swap,
+# no rotation_deg override, and camera_height_m (0.27/0.208) stands. Re-confirm
+# the fisheye height with a tape measure once the box is bolted down, since that
+# depends on where the box sits on the deck rather than on box-internal geometry.
+# History: docs/reference/power_and_supply.md section 4.
+#
+# ⚠ CONSTRAINT ON ANY FUTURE REMOUNT: the radar's RX antenna row must stay
+# HORIZONTAL. The AWR1843BOOST puts 4 RX elements in a lambda/2 row along its
+# azimuth axis (channelCfg 15 7 0), which is where the 15 deg azimuth resolution
+# comes from; elevation comes off a single short baseline. Roll the board 90deg
+# and the OOB firmware reports physical bearing in z and physical elevation in x,
+# so every atan2(X, Y) in this repo returns an elevation angle labelled as a
+# bearing, lateral resolution collapses onto the coarse elevation baseline, and
+# the narrower elevation beam pattern is what spans the horizon. A rolled board
+# still produces a healthy-looking point cloud, so this is invisible in the data:
+# verify it physically (a known-bearing target must move in X, not Z).
+
+T_radar_to_fisheye:
+  - [1.0,  0.0,  0.0, -0.0516]
+  - [0.0,  0.0, -1.0,  0.0020]
+  - [0.0,  1.0,  0.0, -0.0043]
+  - [0.0,  0.0,  0.0,  1.0]
+
+T_radar_to_thermal:
+  - [1.0,  0.0,  0.0, -0.0504]
+  - [0.0,  0.0, -1.0, -0.0604]
+  - [0.0,  1.0,  0.0, -0.0050]
+  - [0.0,  0.0,  0.0,  1.0]
+
+# Camera heights above the waterline, in metres. Used by
+# range_from_water_plane / range_from_undistorted_bbox for single-image
+# range estimation.
+#
+# fisheye: MEASURED 2026-08-19 (AuthorTwo) with the boat afloat and loaded:
+# the lens sits 0.25 m above the waterline. This supersedes the 0.27 m
+# measured 2026-06-22 out of the water, which is the more optimistic figure
+# because the hull sits lower under working load. thermal: DERIVED from the
+# measured 62.3 mm vertical camera separation (fisheye above thermal in the
+# current mounting): 0.25 - 0.062 = 0.188. The radar antenna centre sits
+# 2 mm below the fisheye (~0.248 m) for reference. Re-measure all of these
+# if the box is remounted in a different orientation or the load changes.
+#
+# The 2 cm correction is not cosmetic: monocular range scales linearly with
+# this number. On the 2026-08-19 wading-subject clip it took the fisheye's
+# mean range error from +9.4% to +1.3% against radar truth (see
+# docs/history/2026-08-19_afloat_calibration.md).
+camera_height_m:
+  fisheye: 0.25
+  thermal: 0.188
+
+camera_height_measured: true
+
+# True since 2026-07-07: the transforms above carry measured translations
+# (+-1 mm in-plane, ~+-2 mm forward) and the flat-plate axis-swap rotation.
+# Residual unknowns: any small per-sensor mount tilt (assumed zero; check
+# via the A.1 radar-on-camera overlay) and the approximate forward offsets.
+measured: true

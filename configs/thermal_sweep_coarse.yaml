@@ -1,0 +1,26 @@
+# Thermal tuning sweep: stage 1 (coarse), 2026-07-09.
+# docs/history/2026-07-09_thermal_tuning.md. Scored by scripts/eval/thermal_sweep.py
+# against fisheye GroundingDINO GT on the 16-37-01 quad clip.
+# running_mean background only here; mog2 + horizon overrides are stage 2/3.
+
+triplet: data/captures/2026-07-08/2026-07-08_16-37-01
+labels: labels/qwen/det_2026-07-08.jsonl
+tol_deg: 6.0
+skip_frames: 19
+# Precision-side temporal GT dilation: GroundingDINO labels flicker (a
+# persistent object is boxed in only ~25% of frames); 32% of baseline FPs
+# matched GT within +-7 frames. Recall stays per-frame.
+gt_dilate_frames: 7
+
+grid:
+  thermal.object_thresh: [60, 80, 100, 130, 160]
+  thermal.contrast_guard: [30, 50, 100, 250]
+  thermal.blob.minArea: [2, 4, 8, 16]
+  # Whole-dict variants (Cartesian sweep of nested keys would mostly produce
+  # duplicates when enabled=false).
+  thermal.preprocess:
+    - {enabled: false}
+    - {enabled: true, median_ksize: 3}
+    - {enabled: true, clahe: {enabled: true, clip_limit: 2.0, tile: 8}}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 4}}

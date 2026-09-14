@@ -1,0 +1,44 @@
+# Fine grid-search spec for the GroundingDINO detector
+# (scripts/eval/detector_gridsearch.py). Resolution + exposure are fixed at the
+# known-best (se=1000, exposure 1.0: higher res breaks objects, exposure is
+# noise). Sweeps the objects threshold, the structure threshold, and the new
+# boat_gate (drop a structure box that sits mostly on a boat). The model forward
+# is reused across boat_gate values (gating is post-process), so it is cheap.
+
+model: IDEA-Research/grounding-dino-base
+image_shortest_edge: 1000
+exposure: 1.0
+
+objects_queries:
+  boat: boat
+  sailboat: boat
+  motorboat: boat
+  kayak: boat
+  duck: duck
+  swan: duck
+  buoy: buoy
+  person: person
+  swimmer: person
+objects_text_threshold: 0.30
+
+structure_queries:
+  post: structure
+  piling: structure
+  pole: structure
+  ladder: structure
+  platform: structure
+  diving platform: structure
+structures_large_queries:
+  crane: structure
+  gantry: structure
+  machinery: structure
+  metal tower: structure
+  scaffolding: structure
+
+grid:
+  objects_box_threshold: [0.30, 0.35, 0.40]
+  struct_box_threshold: [0.18, 0.20, 0.22]
+  struct_text_threshold: [0.18]
+  # Drop a structure box if >= this fraction of its area is inside a boat box.
+  # 1.0 = gating off (keep both labels); lower = more aggressive suppression.
+  boat_gate: [1.0, 0.8, 0.6]

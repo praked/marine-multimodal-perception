@@ -1,0 +1,25 @@
+# RECORDED, NOT ADOPTED. This is the 2026-08-19 V.2 recalibration, kept as the
+# evidence that `configs/intrinsics.yaml` needs no change: fx here is ~412
+# against the committed 418.5 (HFOV 92.6 vs 91.0 deg), i.e. agreement to ~2%.
+# Four fits across two shoots landed at fx 400-412, and projecting a surveyed
+# +20.6 deg bearing through the COMMITTED K/D lands on the subject in frame.
+#
+# Do not paste this in. Its RMS (~2 px, want <0.5) is limited by a hand-held
+# board on cardboard flexing, so the committed values remain the better estimate.
+# Must be produced under OpenCV 4: cv2.fisheye.calibrate is broken in 5.0.0 and
+# returns ~36 px RMS silently (see fisheye_recalibrate._check_opencv_fisheye_usable).
+# Fisheye recalibration. RMS reprojection error = 2.027 px,
+# 14 images, board 10x7.
+# Validate with range_validate.py before pasting into configs/intrinsics.yaml.
+fisheye:
+  K:
+    - [411.902777, 0.000000, 442.517344]
+    - [0.000000, 410.504179, 299.461153]
+    - [0.000000, 0.000000, 1.000000]
+  D:
+    - [-0.0252929375]
+    - [0.0124549449]
+    - [-0.0350834191]
+    - [0.0165702596]
+  image_size: [864, 648]
+  model: fisheye

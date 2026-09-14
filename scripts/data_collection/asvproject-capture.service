@@ -1,0 +1,60 @@
+[Unit]
+Description=ASVProject continuous obstacle-detection capture
+Documentation=https://github.com/gh-handle-one/ASVProject-ObstacleDetection
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=simple
+User=vesselauser
+Group=vesselauser
+WorkingDirectory=/home/vesselauser/ASVProject-ObstacleDetection
+ExecStart=/usr/bin/python3 /home/vesselauser/ASVProject-ObstacleDetection/scripts/data_collection/continuous_capture.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+
+# Operator-tunable knobs. Override per-deployment with
+# `sudo systemctl edit asvproject-capture` which creates an override
+# drop-in that supersedes these. Defaults match the script's built-ins.
+Environment=ASVPROJECT_CAPTURE_DIR=/home/vesselauser/captures
+Environment=ASVPROJECT_CHUNK_SECONDS=300
+Environment=ASVPROJECT_FPS=3.0
+Environment=ASVPROJECT_MIN_FREE_GB=2.0
+# Latest-frame snapshot for the shadow process (frame_snapshot.py). A
+# service-owned runtime directory, NOT /dev/shm: systemd-logind's default
+# RemoveIPC=yes deletes a user's /dev/shm objects whenever that user's last
+# login session ends, and this service runs as vesselauser without a session --
+# every ssh logout wiped the snapshot (found 2026-09-07). /run/asvproject is
+# created by systemd for this unit and survives logins.
+RuntimeDirectory=asvproject
+RuntimeDirectoryMode=0755
+Environment=ASVPROJECT_SNAPSHOT_DIR=/run/asvproject
+EnvironmentFile=-/etc/asvproject/box.env
+
+# GPS (own-boat position metadata) is ON by default; ASVPROJECT_GPS_ENABLE=0
+# turns it off, and everything else about it lives in configs/gps.yaml rather
+# than here, because it is a fleet-wide setting and not a per-box one.
+# ⚠ The default source SSHes to boat1, as User= above: the key has to be in
+# THAT account's ~/.ssh. A key installed from a different login works by hand
+# and does nothing for this service, and the only symptom is every clip
+# silently recording the configured fallback position instead of a real fix.
+# Check with: sudo -u vesselauser ssh -o BatchMode=yes boat-b@boat-b true
+
+# Per-box constants (thermal mount orientation, etc.) live in
+# /etc/asvproject/box.env, NOT here, so that this unit stays identical across
+# boats AND so a manual capture agrees with the service: continuous_capture
+# reads the same file when the variable is absent from the environment. Putting
+# it only in a systemd drop-in meant smoke_capture and calibration walks
+# silently recorded UNROTATED thermal (2026-08-19).
+#   /etc/asvproject/box.env
+#     ASVPROJECT_THERMAL_ROTATE_DEG=180
+# SensorBox is 180 (thermal mounted inverted relative to the fisheye,
+# measured 2026-08-18). A box built the other way up sets 0. Getting it wrong
+# puts thermal detections on the WRONG SIDE of the boat and looks plausible.
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

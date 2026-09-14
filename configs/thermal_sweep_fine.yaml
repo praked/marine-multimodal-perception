@@ -1,0 +1,28 @@
+# Thermal tuning sweep: stage 2 (fine), 2026-07-09.
+# Refines around the stage-1 winners (docs/history/2026-07-09_thermal_tuning.md):
+# CLAHE(+median) preprocessing dominates; object_thresh sweet spot 80-160
+# depending on CLAHE strength; minArea 2-4; contrast_guard irrelevant under
+# CLAHE (fixed at default 50).
+
+triplet: data/captures/2026-07-08/2026-07-08_16-37-01
+labels: labels/qwen/det_2026-07-08.jsonl
+tol_deg: 6.0
+skip_frames: 19
+gt_dilate_frames: 7
+
+grid:
+  thermal.object_thresh: [80, 100, 120, 140, 160]
+  thermal.blob.minArea: [2, 3, 4, 6]
+  thermal.preprocess:
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 2.0, tile: 8}}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 8}}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 4}}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 4.0, tile: 4}}
+    - {enabled: true,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 4}}
+    - {enabled: true, median_ksize: 5,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 4}}

@@ -1,0 +1,46 @@
+# Beam/truss A/B grid: does adding connecting-member vocabulary to the
+# structure passes help the complex pontoon (beams between poles)? Short sweep
+# around the current best (objects 0.30, boat_gate 0.8, se 1000), varying the
+# structure threshold. Compare results/grid_beam vs results/grid_fine (no beams)
+# with score_detections to see if beams help on the eval clip.
+
+model: IDEA-Research/grounding-dino-base
+image_shortest_edge: 1000
+exposure: 1.0
+
+objects_queries:
+  boat: boat
+  sailboat: boat
+  motorboat: boat
+  kayak: boat
+  duck: duck
+  swan: duck
+  buoy: buoy
+  person: person
+  swimmer: person
+objects_text_threshold: 0.30
+
+structure_queries:
+  post: structure
+  piling: structure
+  pole: structure
+  ladder: structure
+  platform: structure
+  diving platform: structure
+# Large/complex members + the NEW beam/truss vocabulary for the pontoon frame.
+structures_large_queries:
+  crane: structure
+  gantry: structure
+  machinery: structure
+  scaffolding: structure
+  beam: structure
+  metal beam: structure
+  truss: structure
+  girder: structure
+  crossbeam: structure
+
+grid:
+  objects_box_threshold: [0.30]
+  struct_box_threshold: [0.18, 0.20, 0.22]
+  struct_text_threshold: [0.18]
+  boat_gate: [1.0, 0.8]

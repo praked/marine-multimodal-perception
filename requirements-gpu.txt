@@ -1,0 +1,25 @@
+# GPU-node dependencies for scripts/eval/qwen_batch_labeler.py (InstTwo GPU run).
+# Installed into a scratch venv by scripts/gpu_labeling/setup_scratch_labeling.sh.
+#
+# torch CUDA ceiling (2026-07-09, gpu-node): the InstTwo nodes run driver 560.x
+# (CUDA 12.6). An unpinned resolve pulls torch cu130 wheels, which import but
+# fall back to CPU ("NVIDIA driver ... too old") and torchaudio hard-crashes
+# on libcudart.so.13: the detector run died twice this way. Cap torch below
+# 2.8 so cu126 wheels are selected; if a future node has a newer driver,
+# raise the cap after checking `nvidia-smi` (driver >= 570 for cu128+).
+torch<2.8
+torchvision<0.23
+
+# Qwen3-VL support landed in recent vLLM / transformers: keep the floors high.
+vllm>=0.11.0
+qwen-vl-utils>=0.0.11
+transformers>=4.57.0
+accelerate
+huggingface_hub>=0.24
+pillow>=10.0
+
+# Repo runtime deps the labeler imports (headless variant: no GUI on the node).
+opencv-python-headless>=4.8
+numpy>=1.24
+pandas>=2.0
+pyyaml>=6.0

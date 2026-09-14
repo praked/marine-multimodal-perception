@@ -1,0 +1,87 @@
+# Own-boat GPS: position metadata for training (sun geometry, offline weather
+# correlation by timestamp). NOT navigation — read at capture init and every
+# ~30 min. Consumed by scripts.sensor_processing.gps_boat1.GPSReader, which
+# continuous_capture holds and writes to a gps_<ts>.csv sidecar per chunk.
+#
+# Check it from a terminal on the box (this is the same path capture takes):
+#   python3 -m scripts.sensor_processing.gps_boat1 --check
+#   python3 -m scripts.sensor_processing.gps_boat1 --log-only   # SSH/path only
+#
+# The GPS itself is an ArduSimple simpleRTK2B (u-blox ZED-F9P, RTK rover) on
+# boat1, the boat's central Pi. We do not talk to the receiver: boat1's
+# autopilot already logs every fix, and we read its log.
+
+enabled: true
+
+# Tried in order; first fix wins. Remove a name to disable that source (e.g.
+# `sources: [boat_log]` for a box that must never record a fallback position).
+sources: [boat_log, ble, fallback]
+
+# --- 1. boat1's autopilot log (the default source) --------------------------
+# boatv1's utils/data_logger.py writes <boatv1>/logs/boat_log_<stamp>.csv with
+# ts_iso, gps_lat, gps_lon, ..., fix_q — one row per ~10 Hz control cycle, a new
+# file per run. We take the newest file and its last row that carries
+# coordinates. Nothing on the boatv1 side has to be enabled or changed for this
+# to work, which is exactly why it replaced the BLE bridge plan.
+boat_log:
+  # SSH target for the boat's central Pi. Leave EMPTY to read log_glob as a
+  # local path instead (an sshfs/NFS mount, or an rsync that already dropped
+  # the logs on this box) — the code path is otherwise identical.
+  # Needs a key from this box to boat1: ssh-copy-id boat-b@boat-b.
+  ssh_host: "boat-b@boat-b"
+  # Searched newest-first, so the second pattern covers a checkout under a
+  # different user or a BOAT_LOG_DIR override. Shell globs; expanded remotely
+  # when ssh_host is set. Restricted to path characters (see _SAFE_GLOB).
+  # boat1's checkout is ~/boat/boatv1 (verified on boat-b 2026-09-03); the
+  # flat ~/boatv1 pattern is kept for a checkout that follows the repo name.
+  log_glob:
+    - "~/boat/boatv1/logs/boat_log_*.csv"
+    - "~/boatv1/logs/boat_log_*.csv"
+    - "/home/*/boat/boatv1/logs/boat_log_*.csv"
+    - "/home/*/boatv1/logs/boat_log_*.csv"
+  ssh_timeout_s: 10.0
+  ssh_options:
+    - "BatchMode=yes"           # never prompt: this runs headless from systemd
+    - "ConnectTimeout=5"
+    - "StrictHostKeyChecking=accept-new"
+  # How much of the log tail to fetch. Rows are wide (~40 columns) and mostly
+  # fixless, so 64 KB is a few hundred rows: comfortably enough to find the
+  # newest one carrying coordinates, small enough for a marginal boat link.
+  tail_bytes: 65536
+  # Reject a fix whose own ts_iso is older than this. A log file sitting on
+  # boat1's disk proves nothing about whether the autopilot is still running;
+  # without this an hour-old harbour position would be recorded as current.
+  max_age_s: 3600.0
+
+# --- 2. BLE bridge (the original plan; now a fallback) ----------------------
+# SCAFFOLD, and untested against boat1: confirm the characteristic UUID and
+# packet format on land (--scan / --monitor) before this is worth anything.
+# Left in the chain because it needs no network, so it survives the case where
+# WiFi is down but the boats are in BLE range.
+ble_name: "boat1-gps"
+ble_address: ""        # pin a MAC to skip the scan
+ble_char_uuid: ""      # read/notify characteristic carrying the position
+# Packet the boat1 bridge emits: CONFIRM which:
+#   nmea           ASCII NMEA sentence (GGA carries fix quality; RMC otherwise)
+#   latlon_f64_le  16 B: lat, lon float64 little-endian
+#   csv            ASCII "lat,lon[,fix]" decimal degrees
+packet_fmt: nmea
+
+# --- 3. Fixed fallback (last resort) ----------------------------------------
+# 47°41'44.3"N 9°11'38.1"E — the usual launch point (AuthorTwo, 2026-08-24). Lets a
+# clip carry a defensible sun geometry when neither live source answers: the
+# lake is small enough that solar elevation varies by well under a degree
+# across it. Rows record source=fallback and the smoke test flags it, so this
+# can never be mistaken for a measured position. Set lat/lon to null to refuse
+# to record one at all.
+# (`dashboard/tools/enrich_bundle.py` GPS_INIT holds the same point for the
+# whole dashboard corpus, at 9.193889 — 2 m away, the same place read off the
+# map twice. Immaterial for sun geometry; not a bug to reconcile.)
+fallback:
+  lat: 47.695639
+  lon: 9.193917
+  note: "launch point, fixed: NOT a measured position"
+
+# GPS here is slow metadata: read once at init, then on this cadence.
+refresh_interval_s: 1800.0   # ~30 min
+stale_after_s: 3600.0        # a live source's fix expires after this

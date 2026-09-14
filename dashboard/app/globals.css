@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Institution One corporate design, adapted for a working dashboard.
+   Seeblau (Pantone 2995, #00A9E0) is the single accent; rasterisation tints
+   20/35/65/100 give the sequential family. Typography is near-black ink on
+   Papierweiß; dark mode restates the same system on a lake-at-night surface.
+   Chart palette validated with the dataviz six-checks (see docs/DESIGN.md).
+--------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces (light = Papierweiß with a faint Seeblau cast for depth) */
+  --background: #ffffff;
+  --surface-1: #fbfdfe;
+  --surface-2: #f2f9fc;
+  --surface-3: #e7f2f8;
+  --border: #dcebf3;
+  --border-strong: #b7d4e4;
+
+  /* ink */
+  --foreground: #0a2a3a;
+  --muted: #446071;
+  --subtle: #66808f;
+  --inverse: #ffffff;
+
+  /* Seeblau family (CD rasterisation steps) */
+  --seeblau-20: #cceef9;
+  --seeblau-35: #a6e1f4;
+  --seeblau-65: #59c7eb;
+  --seeblau-100: #00a9e0;
+  --seeblau-deep: #1487b8;
+  --seeblau-navy: #0a2a3a;
+
+  --accent: #00a9e0;
+  --accent-strong: #1487b8;
+
+  /* categorical sensor trio — validated on white (light mode) */
+  --viz-fisheye: #1487b8;
+  --viz-thermal: #b8741a;
+  --viz-radar: #7a6bb5;
+
+  /* overlay + emphasis */
+  --viz-water-edge: #f2a33c; /* poster amber: water edge, thresholds */
+  --viz-trail: #8aa9b8;
+
+  /* status (reserved, always icon + label) */
+  --status-good: #257a3e;
+  --status-warn: #9a6a00;
+  --status-serious: #c0392b;
+
+  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-jetbrains-mono, ui-monospace, monospace);
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --background: #0b1418;
+  --surface-1: #101a20;
+  --surface-2: #152229;
+  --surface-3: #1b2b34;
+  --border: #24363f;
+  --border-strong: #3a5260;
+
+  --foreground: #f2f7fa;
+  --muted: #a8bcc7;
+  --subtle: #7e95a1;
+  --inverse: #0a2a3a;
+
+  --accent: #59c7eb;
+  --accent-strong: #00a9e0;
+
+  /* categorical sensor trio — validated on #101A20 (dark mode) */
+  --viz-fisheye: #1d9bd1;
+  --viz-thermal: #c68018;
+  --viz-radar: #8f7fd0;
+
+  --viz-water-edge: #f2a33c;
+  --viz-trail: #4e6a78;
+
+  --status-good: #4cae6a;
+  --status-warn: #d9a13c;
+  --status-serious: #e06553;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-inverse: var(--inverse);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-seeblau-20: var(--seeblau-20);
+  --color-seeblau-35: var(--seeblau-35);
+  --color-seeblau-65: var(--seeblau-65);
+  --color-seeblau-100: var(--seeblau-100);
+  --color-seeblau-deep: var(--seeblau-deep);
+  --color-seeblau-navy: var(--seeblau-navy);
+  --color-viz-fisheye: var(--viz-fisheye);
+  --color-viz-thermal: var(--viz-thermal);
+  --color-viz-radar: var(--viz-radar);
+  --color-viz-water-edge: var(--viz-water-edge);
+  --color-status-good: var(--status-good);
+  --color-status-warn: var(--status-warn);
+  --color-status-serious: var(--status-serious);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* thin scrollbars, hairline aesthetic */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-pip {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+/* thermal / small rasters should show their pixels honestly */
+.pixelated {
+  image-rendering: pixelated;
+}

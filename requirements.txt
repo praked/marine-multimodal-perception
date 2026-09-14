@@ -1,0 +1,42 @@
+# Runtime dependencies for a development machine (laptop / workstation).
+#
+#     bash deploy/dev_setup.sh          # venv + these + dev deps, then verifies
+#     pip install -r requirements.txt   # or by hand, into your own environment
+#
+# Python 3.11+ (CI runs 3.11 and 3.12).
+#
+# Bounds are floors, not pins: the suite is re-run against current releases and
+# last passed in full (954 tests) on 2026-08-05 with opencv 5.0.0, numpy 2.5.1,
+# pandas 3.0.5, matplotlib 3.11.1. If a future release breaks something, pin it
+# here with a comment saying what broke.
+opencv-python>=4.8
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+pyserial>=3.5
+pyyaml>=6.0
+tqdm>=4.65
+
+# --- Optional extras -------------------------------------------------------
+# Deliberately not installed by default: each is needed by exactly one tool,
+# and that tool reports a clear message and exits when the import is missing.
+#
+#   scikit-learn>=1.3   the v1b gradient-boosted-tree leg of the fusion-scorer
+#                       bake-off (scripts/fusion_model/train.py). The v1a gated
+#                       mixture (the ship candidate) is pure numpy.
+#   onnxruntime>=1.17   run the distilled segmentation student locally
+#                       (scripts.eval.local_seg_masks) instead of waiting for a
+#                       GPU booking.
+#
+# For scripts/eval/qwen_labeler.py, pick ONE backend:
+#   transformers>=4.45 + torch>=2.1 + pillow>=10.0   (local model, ~15 GB)
+#   openai>=1.40                                     (remote Qwen API)
+#
+# GPU-node dependencies are in requirements-gpu.txt / requirements-gpu-seg.txt;
+# they install on the InstTwo node, never here (see docs/guides/gpu_nodes.md).
+
+# --- Raspberry Pi ----------------------------------------------------------
+# Do NOT install these on a laptop, and do NOT use a venv on the Pi: picamera2
+# is not distributed on PyPI. The Pi runs on system apt packages installed by
+# deploy/pi_setup.sh (python3-picamera2, python3-opencv, python3-serial,
+# python3-yaml, plus pip onnxruntime/pandas/pillow). See docs/guides/pi_setup.md.

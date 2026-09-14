@@ -1,0 +1,50 @@
+# DART (SAM3 multi-class, mkturkcan/DART) labeller config — the open-vocabulary
+# TEACHER CANDIDATE to compare against the GroundingDINO recipe
+# (configs/detector_labeler.yaml). Consumed by scripts/gpu_corpus/label_bundle_dart.py.
+#
+# Unlike GroundingDINO, SAM3 takes every class in one call (DART batches 4 per
+# encoder/decoder pass internally), so there are no "passes" — one prompt list.
+# `queries` maps each text prompt -> canonical class (boat/duck/buoy/person/
+# structure/other); several prompts may map to one class and are merged by
+# per-class NMS downstream. v0 = the DINO vocabulary + the water-bird / marker
+# phrases DINO never fired on (22 duck boxes, 0 buoys corpus-wide, while the
+# 2026-08-26 outing had plenty of both in frame). Tune ONLY on the prompt-tuning
+# audit tranche (B), never on the comparison tranche (A).
+# ⚠ prompt_set v1 (suppressor prompts: outboard motor / reflection in water)
+# was TESTED AND REJECTED 2026-09-02 on the tranche-A audit: adding ANY
+# prompts perturbs SAM3's joint scoring — even motors-only cost 9 pts recall
+# and TRIPLED structure FPs. v0 is the validated set; reflections are
+# removed GEOMETRICALLY (scripts.eval.filter_reflections: P 0.89/R 0.94 vs
+# 0.86/0.94 raw). The suppressor mechanism stays in label_bundle_dart.py
+# (config-gated, off) with tests. Full A/B: teacher_comparison.md §4f.
+model: sam3-vit-h            # DART default checkpoint (auto-download); recorded as model_version
+prompt_set: v0
+imgsz: 1008                  # ViT patch multiple of 14; 644 is the fast alternative
+confidence_threshold: 0.30   # DART's per-detection score cut (calibrate per class on tranche B)
+nms_threshold: 0.50
+boat_gate: 0.8               # structure-under-boat suppression, same as the DINO recipe
+queries:
+  boat: boat
+  sailboat: boat
+  motorboat: boat
+  kayak: boat
+  canoe: boat
+  rowing boat: boat
+  paddleboard: boat
+  duck: duck
+  swan: duck
+  goose: duck
+  water bird: duck
+  buoy: buoy
+  marker buoy: buoy
+  mooring buoy: buoy
+  person: person
+  swimmer: person
+  post: structure
+  piling: structure
+  pole: structure
+  ladder: structure
+  platform: structure
+  pier: structure
+  jetty: structure
+  crane: structure

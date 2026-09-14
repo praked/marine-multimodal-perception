@@ -1,0 +1,154 @@
+# Per-clip metadata overrides applied at iterate_triplet read time.
+# Use sparingly: only for one-off capture quirks that aren't fixable at
+# the camera level and that the algorithm wouldn't otherwise notice
+# (rotation, resolution mismatch with the calibrated intrinsics).
+#
+# Schema:
+#   clips:
+#     <scene>/<timestamp>:
+#       fisheye:
+#         target_image_size: [w, h]   # resize to this on load
+#         rotation_deg:      0|90|180|270  # rotate clockwise after resize
+#         note: "free text"            # why this override exists
+#       thermal:
+#         <same fields>
+#       time_alignment: aligned|drift|broken   # metadata only
+#       alignment_note:  "free text"
+#
+# Notes on geometric correctness:
+#   - target_image_size preserves K's calibration when the original aspect
+#     ratio matches the canonical (e.g. fisheye 640x480 -> 864x648, both 4:3;
+#     thermal 640x480 -> 160x120, both 4:3).
+#   - rotation_deg introduces a small K-matrix inaccuracy because cx/cy
+#     are not symmetric (fisheye 444/300, thermal 80.4/62.4). For now we
+#     accept that and treat rotated clips as "approximately correct";
+#     ideal long-term fix is to recapture the affected clip.
+#
+# time_alignment (metadata only, not consumed by iterate_triplet):
+#   - aligned : |video_frames - radar_timestamps| <= 3, treat as canonical
+#   - drift   : small gap, useful for tuning but not for fine bin-agreement
+#   - broken  : large gap, exclude from intersection analysis. Symptom of
+#               data_server.py independent producer threads, not collect.py.
+
+clips:
+
+  # ─────────────────────────────────────────────────────────────────
+  # Boats/2025-07-07_17-11-00: rotated mount + broken time alignment
+  # ─────────────────────────────────────────────────────────────────
+  # Camera box mounted 90 deg CCW: horizon appears vertical, breaking
+  # the RANSAC horizon detector and Sobel-x gradient assumptions.
+  # Both cameras share the mount so both need rotation.
+  # ALSO: 453 video frames vs 211 radar timestamps: data_server.py
+  # independent producer threads, not lockstep. time_alignment: broken.
+  Boats/2025-07-07_17-11-00:
+    fisheye:
+      rotation_deg: 90
+      note: "camera mounted 90 deg CCW during this session"
+    thermal:
+      rotation_deg: 90
+      note: "same physical mount; capture.py's baked-in cv2.ROTATE_180
+             still applied, so saved thermal is at camera-90-CCW + 180-software
+             = 90 deg from upright; rotate 90 CW on load to restore"
+    time_alignment: broken
+    alignment_note: "453 video frames vs 211 radar timestamps (gap +242)"
+
+  # ─────────────────────────────────────────────────────────────────
+  # June 2025 captures: fisheye AND thermal stored at different
+  # resolutions than the intrinsics are calibrated for.
+  # ─────────────────────────────────────────────────────────────────
+  # Fisheye 640x480 vs canonical 864x648 (both 4:3, K scales linearly).
+  # Thermal 640x480 vs Lepton-native 160x120 (4x upscale by PureThermal
+  # carrier; K calibrated for 160x120, so undistortion collapses to
+  # near-uniform unless we downscale on load).
+  Boats/2025-06-23_16-21-07:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120);
+             downscale to canonical so K applies correctly"
+  Boats/2025-06-23_23-34-50:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+  Boats/2025-06-23_23-36-22:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+    time_alignment: drift
+    alignment_note: "60 video frames vs 52 radar timestamps (gap +8); small but worth flagging"
+  Boats/2025-06-23_23-43-01:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+  OpenWater/2025-06-23_16-28-27:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+  OpenWater/2025-06-23_16-30-25:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+  OpenWater/2025-06-23_23-53-27:
+    fisheye:
+      target_image_size: [864, 648]
+      note: "fisheye captured at 640x480; intrinsics calibrated for 864x648"
+    thermal:
+      target_image_size: [160, 120]
+      note: "thermal captured at 640x480 (4x upscale of native Lepton 160x120)"
+
+  # ─────────────────────────────────────────────────────────────────
+  # 2026-07-08 field captures: thermal mounted 180 deg from the fisheye
+  # ─────────────────────────────────────────────────────────────────
+  # AuthorTwo (2026-07-08): the Lepton in this session's mounting is upside
+  # down relative to the fisheye; flip on load so both cameras share the
+  # same side up. Applies to the whole 2026-07-08 session: add matching
+  # entries when other clips from the day get used.
+  # Alignment: 572 video frames vs 590 radar timestamps, but the gap is
+  # PURE TAIL loss: the interrupted capture cost the recovered/trimmed
+  # videos their last ~6 s (radar runs to 16:40:18.5, group[571] =
+  # 16:40:12.5 = last video frame). Index pairing verified: the one 1.7 s
+  # capture-loop stall (16:37:30.8) hit video and radar rows together.
+  2026-07-08/2026-07-08_16-37-01:
+    thermal:
+      rotation_deg: 180
+      note: "Lepton mounted 180 deg from the fisheye this session; flip to
+             same side up"
+    time_alignment: aligned
+    alignment_note: "head-aligned; 18 radar timestamps past the recovered
+                     videos' tail (interrupted capture), harmless under
+                     index pairing"
+    scene_note: "Clip opens with the boat just off the pontoon: AuthorOne
+                 setting it in the water / cleaning cameras (per AuthorTwo,
+                 2026-07-09). Early frames legitimately contain a person
+                 at close range, handling motion (the large IMU pitch
+                 excursions), and possible lens occlusion; the IMU BLE
+                 link connects at ~16:37:27. Treat the opening ~30 s as
+                 setup, not representative scene content, when labelling
+                 or computing metrics."
+
+  # ─────────────────────────────────────────────────────────────────
+  # Time-alignment-only flags for clips otherwise canonical
+  # ─────────────────────────────────────────────────────────────────
+  Ducks/2025-07-07_17-13-46:
+    time_alignment: broken
+    alignment_note: "233 video frames vs 134 radar timestamps (gap +99)"
+  Ducks/2025-07-07_17-15-37:
+    time_alignment: broken
+    alignment_note: "119 video frames vs 28 radar timestamps (gap +91)"

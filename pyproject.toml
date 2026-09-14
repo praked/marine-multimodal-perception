@@ -1,0 +1,98 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "needs_data: requires data/ fixture triplets",
+]
+
+[tool.ruff]
+# Deliberately an ERROR linter, not a style linter.
+#
+# Most of this tree is research code, some of it inherited. Enforcing import
+# order or line length across it would mean rewriting working code to satisfy
+# a linter, which is the wrong trade. What IS worth failing CI over is code
+# that cannot be correct: undefined names, unreachable branches, broken format
+# strings, mutable default arguments.
+#
+# The selected set is verified to pass with zero findings; if you want the
+# style rules too, run `ruff check --select ALL` locally and treat it as
+# advice rather than a gate.
+target-version = "py311"
+extend-exclude = ["data", "models", "results", "lars", "poster"]
+
+[tool.ruff.lint]
+select = [
+    "E9",     # syntax / IO errors ruff cannot recover from
+    "F63",    # comparison bugs (is-literal, == on tuples, ...)
+    "F7",     # statement-placement errors (break outside loop, ...)
+    "F82",    # undefined name / undefined local
+    "F502",   # percent-format bugs
+    "F506",
+    "F522",
+    "F524",
+    "B002",   # pre-increment (++n) that silently does nothing
+    "B006",   # mutable default argument
+    "B018",   # useless expression (a statement with no effect)
+]
+
+[tool.coverage.run]
+source = ["scripts"]
+# Excluded modules fall into three families that can't be meaningfully unit
+# tested off the boat, mirroring the existing viewer/data_collection
+# exclusions:
+#   * hardware I/O loops: need the Pi, serial ports, or the camera stack;
+#   * interactive GUIs: cv2/Tk/matplotlib event loops driven by a human;
+#   * GPU/VLM node scripts: load multi-GB models or hit a remote model API.
+omit = [
+    "scripts/__init__.py",
+    "scripts/*/__init__.py",
+    # hardware I/O (Pi, serial, picamera2, I2C IMU)
+    "scripts/data_collection/*",
+    "scripts/sensor_processing/imu_bno085.py",
+    # interactive GUI event loops
+    "scripts/eval/viewer.py",
+    "scripts/eval/dashboard.py",
+    # cv2.imshow calibration capture loop; the only thermal-intrinsics tool we
+    # have, and thermal recalibration is still open (V.2).
+    "scripts/sensor_processing/thermal_calibrate.py",
+    # GPU-node / remote-model labellers (load GroundingDINO / Qwen-VL weights)
+    "scripts/eval/detector_labeler.py",
+    "scripts/eval/detector_gridsearch.py",
+    "scripts/eval/qwen_batch_labeler.py",
+    # imports ultralytics (YOLO): not installable from requirements*.txt in CI
+    "scripts/eval/yolo_infer.py",
+    # GPU-node eWaSR train/export (torch, onnxruntime.quantization) + the Pi
+    # on-device runtimes (onnxruntime / tflite_runtime on the Pi itself)
+    "scripts/gpu_seg/*",
+    # GPU-node YOLO fine-tune / predict / val: all import ultralytics
+    "scripts/gpu_finetune/*",
+    # GPU-node DART/SAM3 labelling driver (loads sam3 weights on the node)
+    "scripts/gpu_corpus/label_bundle_dart.py",
+    # On-device Pi benchmark (onnxruntime + the firmware clock via vcgencmd)
+    "scripts/eval/pi_timing_bench.py",
+    # Footage-driven evaluation / report tools (added 2026-08-24 .. 09-07):
+    # they replay the gitignored corpus or render report files; their tests
+    # are marked needs_data and skip in CI, so counting them here only
+    # measures whether the footage is present. Library code they call
+    # (pipeline, target_motion, track_identity, fusion_model.*) stays covered.
+    "scripts/eval/target_motion_eval.py",
+    "scripts/eval/track_identity_eval.py",
+    "scripts/eval/instance_assoc_ab.py",
+    "scripts/eval/scorer_smoothing_eval.py",
+    "scripts/eval/radar_clutter_map.py",
+    "scripts/eval/fusion_audit_queue.py",
+    "scripts/eval/pi_timing_figures.py",
+    "scripts/eval/handover_figure.py",
+    "scripts/data/repair_videos.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING",
+]
+show_missing = true
+skip_covered = false

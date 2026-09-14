@@ -1,0 +1,47 @@
+# Camera intrinsics for the obstacle-detection module.
+#
+# Source: copied at Phase I.4.0 from the constants that were inlined in the
+# original standalone fisheye/thermal scripts (since removed; see the git
+# history). Those values came from the original calibration scripts run
+# against unknown captures, so they should be re-validated when better
+# captures land (see PLAN.md §V.2). Re-derive the fisheye with
+# scripts.sensor_processing.fisheye_recalibrate; the thermal side still only
+# has thermal_calibrate.py.
+#
+# cx and pix_deg_ratio are *experimentally* determined per the original
+# docstrings, not derived from K. Treat them as magic for now.
+
+fisheye:
+  # cv2.fisheye (Kannala-Brandt) model, 4 distortion coefficients k1..k4.
+  K:
+    - [418.51, 0.0,    444.11]
+    - [0.0,    418.58, 300.50]
+    - [0.0,    0.0,    1.0]
+  D:
+    - [-0.029317890988973864]
+    - [ 0.008321019929328282]
+    - [-0.022020233653477182]
+    - [ 0.010100750499314356]
+  image_size: [864, 648]   # (width, height) = (2592/3, 1944/3)
+  cx: 472                  # optical-axis x-pixel (not image center)
+  pix_deg_ratio: 7.2       # implies ~120 deg horizontal FOV across 864 px
+  model: fisheye
+
+thermal:
+  # cv2 standard pinhole + radial/tangential distortion, 5 coeffs k1,k2,p1,p2,k3.
+  K:
+    - [63.78, 0.0,   80.44]
+    - [0.0,   64.12, 62.40]
+    - [0.0,   0.0,   1.0]
+  D: [-0.0446, -0.00027235, -0.0050242577, -0.003910302, 0.00086112796]
+  image_size: [160, 120]
+  cx: 77                   # ~ image center (160/2 = 80)
+  pix_deg_ratio: 2.82      # implies ~57 deg HFOV, matches Lepton 3 spec
+  model: pinhole
+
+# mmWave radar has no optical intrinsics. TI convention:
+#   X = lateral (right positive), Y = forward range, Z = up. Units: metres.
+# Bearings derived as atan2(X, Y) in degrees, 0 deg = straight ahead.
+mmwave:
+  frame: ti
+  units: m

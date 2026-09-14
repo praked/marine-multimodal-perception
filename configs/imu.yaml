@@ -1,0 +1,152 @@
+# BNO085 IMU: feeds pitch/roll to the monocular range estimator
+# (geometry.range_from_water_plane_up via the pipeline) and yaw for heading.
+#
+# As of 2026-07-14 the BNO085 is wired DIRECTLY into SensorBox (Pi 5) and
+# read over UART in RVC mode: that is the default. The older BLE path (IMU on
+# boat1, bridged over Bluetooth) is kept as a selectable backend; it was also
+# the template for the GPS reader, which since 2026-08-24 reads boat1's
+# autopilot log over SSH instead and keeps BLE only as a fallback source
+# (configs/gps.yaml). Full write-up + the abandoned-SPI post-mortem:
+# docs/reference/imu_uart_rvc.md.
+#
+# NOTE: this file configures the *live* BNO085Reader used by the pipeline.
+# The capture service (continuous_capture.py) has its own reader selected by
+# ASVPROJECT_IMU_BACKEND (default uart_rvc); offline replay uses imu_replay
+# against the imu_<ts>.csv sidecar.
+
+# Master switch for the live reader. Leave false unless running the pipeline
+# live on the Pi; capture + replay do not consult it. Verify the link with:
+#   python -m scripts.sensor_processing.imu_bno085 --backend uart_rvc --monitor
+enabled: false
+
+# uart_rvc | simulation | ble | serial
+#   uart_rvc:   DEFAULT. Directly-wired BNO085, UART-RVC (yaw/pitch/roll @100Hz,
+#               no host commands). Reads uart_port below.
+#   simulation: synthetic seaway, no hardware (exercise the pipeline anywhere).
+#   ble:        BNO085 on boat1 bridged over a BLE notify characteristic (bleak).
+#   serial:     packets over a serial (e.g. RFCOMM) port via pyserial.
+backend: uart_rvc
+
+# get() returns None if the newest sample is older than this -> range falls
+# back to the detected horizon. Keep small so a dropped link degrades fast.
+stale_after_s: 0.5
+
+# --- uart_rvc backend (default; directly-wired box IMU) --------------------
+# Mode strap: PS1=Low, PS0=High. Sensor TX (the SDA pad) -> Pi pin 10
+# (GPIO15/RXD). The Pi's GPIO UART must be enabled (dtparam=uart0=on) so
+# /dev/ttyAMA0 exists; the console stays on the separate debug UART (ttyAMA10).
+uart_port: "/dev/ttyAMA0"
+uart_baud: 115200
+
+# --- ble backend (legacy: IMU on boat1; was the GPS-over-BLE template) -----
+# packet_fmt: quat_f32_le (16 B w,x,y,z LE) | euler_f32_le_deg | csv
+packet_fmt: quat_f32_le
+ble_address: ""        # e.g. "C4:3A:..." (or a CoreBluetooth UUID on macOS)
+ble_char_uuid: ""      # notify characteristic carrying the attitude packets
+
+# --- serial backend --------------------------------------------------------
+serial_port: ""        # e.g. "/dev/rfcomm0"
+serial_baud: 115200
+serial_frame_bytes: 0  # 0 = readline() (csv); else fixed binary frame size
+
+# Live-reader attitude derivation: same contract as replay.attitude_source
+# below (shared composition code in imu_replay -> live/replay parity).
+# "rotation" is required for the box mount (raw Euler angles sit beside
+# gimbal lock); the simulation backend is exempt (it synthesizes camera-frame
+# attitude directly). Under "rotation" the published yaw is the composed
+# camera-frame heading (camera_heading_from_rvc), not the raw RVC yaw.
+attitude_source: rotation
+mount_invert_lateral: true
+
+# Mount alignment: with the boat sitting level, put the residual pitch/roll
+# (radians) here so the reported angles become the CAMERA's attitude.
+# NB for live use copy the measured replay offsets below once
+# imu_attitude_check has confirmed them for the current mount.
+mount_offset_rad:
+  pitch: 0.0
+  roll: 0.0
+
+# --- simulation backend tuning (ignored by real backends) ------------------
+simulation_hz: 50.0
+simulation_roll_deg: 5.0
+simulation_pitch_deg: 2.0
+simulation_period_s: 5.0
+
+# --- offline replay of captured imu_<ts>.csv logs ---------------------------
+# Used by scripts.sensor_processing.imu_replay.ImuLogAttitudeProvider when a
+# clip carries an IMU sidecar. Maps the sensor-frame (roll, pitch, yaw) onto the
+# camera's (pitch, roll). Handles both CSV formats automatically (native Euler
+# from UART-RVC, and the legacy W/X/Y/Z quaternion).
+replay:
+  max_age_s: 1.0
+
+  # AXIS MAPPING. VALIDATED 2026-08-19 afloat for the current box mount (see
+  # mount_offset_rad below for the numbers): rotation composition against the
+  # segmented water edge tracks pitch at r = 1.00 over +-13 deg of deliberate
+  # rocking, and roll at r = 0.94. Both pitch and roll may now be trusted by
+  # the range estimator. REDO this check after ANY remount of the IMU or the
+  # box, and after any change to mount_invert_lateral:
+  #   python -m scripts.eval.imu_attitude_check --triplet <prefix> \
+  #     --attitude-source rotation --reference water-edge
+  # HOW the camera's attitude is derived from the log:
+  #   rotation (DEFAULT): rebuild the rotation the RVC angles encode and
+  #     re-extract pitch/roll in the CAMERA frame. Required for the box mount:
+  #     the BNO085 sits on the enclosure's back panel, which parks its Euler
+  #     parameterisation ~12 deg from gimbal lock, so a single-axis tilt swings
+  #     the reported yaw and roll together by ~79 deg. The rotation itself is
+  #     exact (it reproduces measured gravity to 0.01 deg); only the angles are
+  #     ill-conditioned. Fitted convention: ZXY, world-down +Z.
+  #   euler: the historical sign/swap/offset handling. Correct only where the
+  #     parameterisation is well conditioned.
+  #
+  # ⚠ LEGACY CLIPS: the 2026-07-08 quad clips carry the boat1 BLE IMU on a
+  # DIFFERENT mount, which predates this box. To replay those faithfully set
+  # attitude_source: euler with swap_roll_pitch: true / sign_pitch: -1 and
+  # their own offsets. The default below describes the CURRENT box, because
+  # everything captured from 2026-07-14 onward uses it and getting it wrong
+  # there costs an ~81 deg pitch error.
+  attitude_source: rotation
+  # 180 deg about the camera's forward axis (sensor X -> -X, Y -> -Y, Z -> +Z),
+  # measured 2026-08-17 from a five-pose tilt sequence.
+  mount_invert_lateral: true
+  # Where the replayed YAW comes from. Defaults to attitude_source, so under
+  # "rotation" the yaw is the composed camera-frame HEADING
+  # (imu_replay.camera_heading_from_rvc, added 2026-08-24): the raw RVC yaw
+  # is gimbal-aliased on this mount (a +-13 deg pitch rock swings it by
+  # ~105 deg; the composed heading moves 17 deg, std 3.9 vs 36.9). The yaw
+  # sign inside the fitted ZXY convention -- the one DOF the five-pose
+  # up-vector fit could not see -- was pinned on the 2026-08-19 rocked clip
+  # (the wrong sign exactly DOUBLES the aliasing). Set "raw" to opt back
+  # into the sensor yaw (target_motion_eval --yaw-source raw uses this to
+  # reproduce the 2026-08-24 baselines).
+  # yaw_source: rotation
+
+  # Only consulted when attitude_source: euler.
+  swap_roll_pitch: false
+  sign_roll: 1.0
+  sign_pitch: 1.0
+  # "none" = trust mount_offset_rad below; "median" = subtract the clip's median
+  # roll/pitch (treats the clip's median attitude as level: erases real static
+  # tilt, so prefer a measured offset once imu_attitude_check has run).
+  zero: none
+  # MEASURED 2026-08-19 afloat, against the SEGMENTED WATER EDGE over a
+  # deliberately rocked clip (imu_rock/2026-08-19_15-39-40: 357 frames, ~14
+  # cycles at +-13 deg pitch). This supersedes the 2026-08-18 pontoon figures
+  # and settles the caveat they carried, that a treeline horizon biases
+  # ABSOLUTE pitch by of order a degree: the water edge put that bias at
+  # -0.85 deg, and it is folded in below. Roll moved only -0.11 deg.
+  #
+  # Agreement after applying these, on the same clip:
+  #   pitch  corr +1.00  bias +0.31 deg  residual sd 1.18 deg  (excitation 9.25 deg)
+  #   roll   corr +0.94  bias +0.11 deg  residual sd 0.61 deg  (excitation 1.64 deg)
+  # That closes the long-standing weak-pitch-validation caveat: the 2026-07-08
+  # clip could only reach r <= 0.24 because it was calm, not because the axis
+  # was wrong. Re-derive with:
+  #   python -m scripts.eval.imu_attitude_check --triplet <prefix> \
+  #     --attitude-source rotation --reference water-edge
+  #
+  # The roll figure independently reproduces the indoor bench estimate of 9.69
+  # deg, measured from a room's true verticals, to within 0.1 deg.
+  mount_offset_rad:
+    pitch: 0.07507   # +4.30 deg
+    roll: 0.17037    # +9.76 deg

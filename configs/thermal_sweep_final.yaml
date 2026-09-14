@@ -1,0 +1,32 @@
+# Thermal tuning sweep: stage 4 (final: open-water FP constraint), 2026-07-09.
+# The stage-2 winner exploded on target-free 2025 water (CLAHE amplifies
+# water/noise texture: night OpenWater 1.8 -> 4.4 det/frame, Rain 0.75 ->
+# 5.65). This grid re-opens the preprocessing axis and adds two FP-reference
+# clips to the objective; selection = best 16-37-01 F1 subject to
+# fpclip det/frame <= baseline.
+
+triplet: data/captures/2026-07-08/2026-07-08_16-37-01
+labels: labels/qwen/det_2026-07-08.jsonl
+tol_deg: 6.0
+skip_frames: 19
+gt_dilate_frames: 7
+
+# Target-free reference clips: every detection here is a false positive
+# (2025 OpenWater; the night clip is the uniform-scene noise probe).
+fp_clips:
+  ow_night: data/OpenWater/2025-06-23_23-53-27
+  ow_day: data/OpenWater/2025-06-23_16-28-27
+
+grid:
+  thermal.object_thresh: [80, 100, 120, 140, 160]
+  thermal.blob.minArea: [2, 4, 8]
+  thermal.contrast_guard: [50, 250]
+  thermal.preprocess:
+    - {enabled: false}
+    - {enabled: true, median_ksize: 3}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 2.0, tile: 8}}
+    - {enabled: true, median_ksize: 3,
+       clahe: {enabled: true, clip_limit: 4.0, tile: 4}}
+    - {enabled: true,
+       clahe: {enabled: true, clip_limit: 3.0, tile: 4}}

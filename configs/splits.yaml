@@ -1,0 +1,41 @@
+# Frozen split definition. Edit when a new field campaign starts so
+# that everything captured AFTER the cutoff date is held out.
+
+# Until V.1 / V.4 produce post-arrival captures, leave test_after empty
+# and rely on the hash-based stratified split below.
+test_after: null
+
+# Explicit val/test pins for clips you want guaranteed in those splits
+# regardless of hash bucket. Format: "<scene>/<timestamp>".
+val_clips:
+  # Boats pin swapped 2026-06-11; see sweep_baseline.yaml for the
+  # camera/radar time-alignment issue on the previous pin.
+  - Boats/2025-06-23_16-21-07
+  - Ducks/2025-07-15_05-36-18
+  - OpenWater/2025-06-23_23-53-27
+  - Rain/2025-07-15_02-59-02
+  # Permanent thermal-training holdout (under-pier scene; the thermal-
+  # student v0/v1 eval clip: keeps model deltas comparable across rounds).
+  - 2026-07-08/2026-07-08_16-44-56
+
+test_clips: []
+
+# Deterministic SHA-256 bucketing for everything not pinned and not after
+# test_after.
+pre_test_after_ratios:
+  train: 0.70
+  val:   0.15
+  test:  0.15
+
+# Group-hash bucketing (approved 2026-07-10, thermal tuning log): hash on
+# the OUTING (<scene>/<YYYY-MM-DD>, or an explicit `groups:` entry) instead
+# of the clip, so same-outing near-duplicate clips cannot leak across
+# train/val. NOTE: enabling this reshuffles unpinned pre-cutoff clips
+# (different hash key); pinned clips are unaffected. labels/releases
+# snapshots keep their frozen assignments.
+group_hash: true
+
+# Explicit outing-group overrides for days spanning multiple locations
+# (one-word location tag at capture time: capture runbook §3.4).
+# Format: {group_name: [clip_id, ...]}
+groups: {}
