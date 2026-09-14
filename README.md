@@ -1,8 +1,8 @@
-# ASVProject Obstacle Detection
+# ASV Marine Multimodal Obstacle Detection
 
 
 
-Obstacle detection for the ASVProject autonomous sailboat project (Institution One, a research centre). A waterproof
+ASV Marine Multimodal Obstacle Detection for an autonomous sailboat project (Institution One, a research center). A waterproof
 sensor box on the boat records **fisheye RGB video, thermal (LWIR) video, and
 mmWave radar point clouds with per-point Doppler**, plus attitude from an IMU
 and RTC-backed timestamps. Offline, a fusion pipeline turns those into
@@ -508,4 +508,4 @@ Two things to know before relying on this:
 - Base work: Author Zero
 - Project lead: Author One
 - Institution: Institution One, a research centre
-- Internship and funding: a funder and Mitacs
+- Internship and funding: a funder 
