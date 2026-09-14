@@ -94,7 +94,6 @@ Module power modes are not measured application consumption. All estimates
 require validation at the chosen workloads; maxima are not worst-case
 electrical specifications.
 
----
 
 ### Table S2 — Representative perception-module component costs
 
@@ -110,7 +109,6 @@ Quantity is one per row unless stated otherwise.
 | BNO085 IMU breakout | 23 |
 | **Total** | **793** |
 
----
 
 ### Table S3 — Prototype sensor-box configuration
 
