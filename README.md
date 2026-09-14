@@ -66,8 +66,6 @@ Sensor-suite power budgets, module bill of materials, and prototype hardware
 configuration for the condition-conditioned RGB–thermal–radar obstacle
 perception module.
 
----
-
 ### Table S1 — Illustrative sensing-plus-host-compute budgets
 
 All values in watts (W), excluding auxiliary electronics and conversion losses.
