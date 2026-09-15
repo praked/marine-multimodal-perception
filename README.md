@@ -31,7 +31,8 @@ tooling work with just the fisheye fitted; see
 - [Repository layout](#repository-layout)
 - [Data format](#data-format)
 - [Processing pipeline](#processing-pipeline)
-- [Testing and continuous integration](#testing-and-continuous-integration)
+- [Testing](#testing)
+- [Closed-loop trials](#closed-loop-trials)
 - [Documentation](#documentation)
 - [Project status](#project-status)
 - [Authors](#authors)
@@ -52,12 +53,18 @@ tooling work with just the fisheye fitted; see
   distilled to an LRASPP student) giving waterline-contact range correction and
   a per-bearing navigable free-space profile, in **real time on the Pi 4** at
   4.6 fps via INT8 ONNX.
-- **A learned fusion scorer** (phases 0–2) replacing hand-written vote counting
-  with a per-bin probability conditioned on context.
+- **A learned fusion scorer**: a gradient-boosted, isotonic-calibrated per-sector
+  obstacle probability over RGB, thermal and radar evidence plus acquisition
+  context, trained on human-audited labels and evaluated session-disjoint
+  (`scripts/fusion_model/`).
+- **The perception-to-control chain**: a 46-byte sector packet over Bluetooth LE,
+  and the closed-loop lake pilot that drove 24 legs on it (see
+  [Closed-loop trials](#closed-loop-trials)).
 - **An evaluation suite**: interactive dashboard, labelling and audit tools,
   quantitative metrics, parameter sweeps, range validation.
-- **Field data**, CAD for the sensor mount, and the full operational
-  documentation set.
+- **Audited labels** (`labels/`), CAD for the sensor mount, and the reference
+  documentation (data formats, sector protocol, extrinsics, segmentation layer,
+  on-box timing).
 
 
 ## Supplementary Tables
@@ -141,29 +148,13 @@ CAD for the 3D-printed mount is in [CAD/](CAD/); measured sensor offsets are in
 ### Development machine (laptop / workstation)
 
 ```bash
-git clone https://github.com/gh-handle-one/ASVProject-ObstacleDetection.git
-cd ASVProject-ObstacleDetection
-bash deploy/dev_setup.sh
-```
-
-That creates `.venv/`, installs [requirements.txt](requirements.txt) and
-[requirements-dev.txt](requirements-dev.txt), verifies the imports and configs
-load, and runs the test suite. Then activate it in each new shell:
-
-```bash
-source .venv/bin/activate
-```
-
-Prefer to do it by hand? The script is doing exactly this:
-
-```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest -q
+python -m pytest -q          # 1,343 tests; the data-dependent ones skip without footage
 ```
 
-Requires **Python 3.11+** (CI runs 3.11 and 3.12). Dependency bounds are floors,
-not pins; the suite is re-verified against current releases.
+Requires **Python 3.11+** (verified on 3.11 and 3.12). Dependency bounds are
+floors, not pins.
 
 Two optional extras are deliberately not installed; each is needed by one tool,
 which says so and exits if it is missing:
@@ -176,23 +167,19 @@ pip install scikit-learn    # the v1b GBT leg of the fusion-scorer bake-off
 ### Raspberry Pi
 
 The Pi does **not** use a virtualenv: `picamera2` is not on PyPI, so the
-capture stack runs on system apt packages. After flashing the card and pushing
-the repo:
-
-```bash
-bash deploy/pi_setup.sh
-```
-
-Full walkthrough, including the parts that need a human (imager settings,
-wiring, Wi-Fi, Tailscale): **[docs/guides/pi_setup.md](docs/guides/pi_setup.md)**.
+capture stack runs on system apt packages. The apt package list, the
+`config.txt` lines and the systemd unit are summarised under
+[The Raspberry Pi](#the-raspberry-pi); the capture service is
+`scripts/data_collection/continuous_capture.py`.
 
 ### GPU node
 
-Model training and VLM labelling run on a InstTwo GPU node via the numbered
-pipelines in `scripts/gpu_seg/`, `scripts/gpu_finetune/` and
-`scripts/gpu_labeling/`; see
-[docs/guides/gpu_nodes.md](docs/guides/gpu_nodes.md). Requirements are in
-`requirements-gpu.txt` / `requirements-gpu-seg.txt` and install on the node.
+Model training and open-vocabulary labelling run on a GPU node via the
+numbered pipelines in `scripts/gpu_express/` (one params file, prepare →
+stage → launch → status → pull; see its README), with the older per-workflow
+kits in `scripts/gpu_seg/`, `scripts/gpu_finetune/`, `scripts/gpu_dart/` and
+`scripts/gpu_corpus/`. Requirements are in `requirements-gpu.txt` /
+`requirements-gpu-seg.txt` and install on the node.
 
 ---
 
@@ -214,10 +201,9 @@ python -m scripts.sensor_processing.fusion \
 python -m scripts.eval.dashboard
 ```
 
-Every command in the project (connecting to the Pi, capturing, syncing,
-replaying, labelling, running models) is in
-**[docs/field_reference.pdf](docs/field_reference.pdf)**, each with the files it
-writes.
+Every tool prints its own usage with `python -m scripts.<path> --help`; the
+files the box writes and the pipeline reads are specified in
+[docs/reference/data_formats.md](docs/reference/data_formats.md).
 
 ---
 
@@ -250,12 +236,10 @@ python3 -m scripts.data_collection.smoke_capture --seconds 10 --fisheye-only
 # flags before vs after: PASS / WARN / FAIL.
 python3 -m scripts.data_collection.smoke_fisheye --seconds 10
 
-# Run the capture service fisheye-only (survives restarts; one command to undo)
-sudo mkdir -p /etc/systemd/system/asvproject-capture.service.d
-sudo cp deploy/asvproject-capture-fisheye-only.conf \
-        /etc/systemd/system/asvproject-capture.service.d/override.conf
-sudo systemctl daemon-reload && sudo systemctl restart asvproject-capture
-sudo systemctl revert asvproject-capture    # undo: back to the full stack
+# Run the capture service fisheye-only (a systemd drop-in that sets the flag)
+sudo systemctl edit asvproject-capture       # add: [Service] Environment=ASVPROJECT_FISHEYE_ONLY=1
+sudo systemctl restart asvproject-capture
+sudo systemctl revert asvproject-capture     # undo: back to the full stack
 ```
 
 The journal states the sensor set at boot and on every chunk, so a reduced run
@@ -281,21 +265,17 @@ Tools that *fuse* sensors (`scripts.sensor_processing.fusion`, the dashboard,
 `scripts.eval.metrics`) still require a complete triplet and refuse a
 fisheye-only clip by design: one sensor is not a fusion input.
 
-> Fisheye-only is also the **reduced-power mode**, which is what kept captures
-> going through the 2026-07-16 boat-power blocker (closed 2026-08-14: the cause
-> was reversed power and ground connections in the wiring, not the DC-DC
-> converter). It remains useful as a low-draw mode and as a diagnostic when a
-> supply is suspect:
-> [docs/reference/power_and_supply.md](docs/reference/power_and_supply.md).
+> Fisheye-only is also the **reduced-power mode**: it stays under the supply's
+> collapse threshold where the full stack does not, which makes it a useful
+> diagnostic when a supply is suspect.
 
 ---
 
 ## The Raspberry Pi
 
-Provisioning, verification, and the rebuild checklist:
-**[docs/guides/pi_setup.md](docs/guides/pi_setup.md)**. Current addresses live in
-[docs/field_reference.pdf](docs/field_reference.pdf): campus DHCP leases drift,
-so prefer the Tailscale name.
+The box as it ran the 2026-09-08 trials. Addresses are deliberately not
+recorded here; the box is reached over a mesh VPN name rather than a DHCP
+lease.
 
 ### Configuration snapshot
 
@@ -375,13 +355,9 @@ the radio off. And I²C enabled via `config.txt` does **not** auto-load `i2c-dev
 ├── data/                      Recordings (gitignored)
 │   ├── Boats/ Ducks/ OpenWater/ Rain/     scenario clips
 │   └── captures/<mission>/                field captures, via scripts.data.ingest
-├── deploy/                    Provisioning: dev_setup.sh, pi_setup.sh, systemd drop-ins
-├── docs/                      Documentation; see docs/README.md for the index
-│   ├── guides/                living how-to (Pi setup, capture runbook, model runtime, GPU)
-│   ├── reference/             stable specs (data formats, sector protocol, extrinsics, IMU, power)
-│   ├── plans/                 agreed-but-unbuilt direction
-│   └── history/               frozen dated session logs
-├── images/                    README images
+├── dashboard/                 Web dashboard (Next.js): viewer, annotation, audit, coverage map
+├── docs/reference/            Data formats, sector protocol, extrinsics, segmentation, on-box timing
+├── images/                    README images, incl. closed_loop/ (2026-09-08 trial figures)
 ├── labels/                    Ground-truth JSONL (tracked) + versioned releases
 ├── models/                    Trained weights + ONNX exports (gitignored; published on Hugging Face)
 ├── scripts/
@@ -389,11 +365,12 @@ the radio off. And I²C enabled via `config.txt` does **not** auto-load `i2c-dev
 │   ├── data_collection/       Pi capture service, smoke tests, sensor health, calibration capture
 │   ├── eval/                  Dashboard, viewer, metrics, sweeps, labelling, range validation
 │   ├── fusion_model/          Learned fusion scorer: features, targets, training, evaluation
-│   ├── gpu_seg/ gpu_finetune/ gpu_labeling/    GPU-node training/labelling + Pi model runtime
+│   ├── gpu_express/ gpu_corpus/ gpu_dart/ gpu_seg/ gpu_finetune/ gpu_labeling/
+│   │                          GPU-node staging, training, labelling + Pi model runtime
 │   ├── lars/                  LaRS dataset staging + YOLO converters
 │   ├── sensor_processing/     Pipeline, fusion, motion, heading, trackers, IMU, GPS
 │   └── utils/                 Calibration, geometry, segmentation, association, dataset helpers
-└── tests/                     pytest suite (954 tests)
+└── tests/                     pytest suite (1,343 tests)
 ```
 
 ## Data format
@@ -451,15 +428,19 @@ that each sensor is trusted where it is actually reliable:
 
 ![Fusion scoring flow](images/fusion_flowchart.png)
 
-That probability is the threat map the autopilot is meant to steer by. It is
-**not** wired into navigation today: the scorer runs in shadow mode alongside
-the rule-based score, and the weights come from a pre-data bake-off, so the
-night and foul-weather behaviour the gate is designed for is still unproven.
-See [Project status](#project-status).
+That probability is the field the navigation controller steers by. On the
+vessel the scorer runs as a separate process beside the capture service and
+transmits a 46-byte sector packet over Bluetooth LE at up to 3 Hz
+([docs/reference/sector_protocol.md](docs/reference/sector_protocol.md)); the
+2026-09-08 lake pilot drove 24 legs on that stream
+([Closed-loop trials](#closed-loop-trials)). What it cannot yet do is fuse at
+true night: with the RGB frame black, the rule-based vote still ranks sectors
+better than every learned variant on the audited night frames. See
+[Project status](#project-status).
 
 One dockside frame through the full stack: fisheye segmentation, thermal, radar
 bird's-eye, and the learned scorer's per-sector probability, drawn over the
-same 10° sectors the radar view uses. ▾ marks a **radar-confirmed detection**:
+same 15° sectors the radar view uses. ▾ marks a **radar-confirmed detection**:
 radar returns projected inside a camera detection's gate (equal ~4.3°
 tolerance per camera: `fusion.association.max_px` / `thermal_max_px`), with
 the mark placed on the sectors those matched returns actually occupy and only
@@ -492,74 +473,107 @@ is `scripts.eval.radar_video` and the dashboard, and fisheye calibration is
 `fisheye_recalibrate.py`. They remain in the git history if you ever need to
 compare against the originals.
 
-## Testing and continuous integration
+## Testing
 
 ```bash
-python -m pytest                                       # full suite (969 tests)
+python -m pytest                                       # full suite (1,343 tests)
 python -m pytest --cov=scripts --cov-report=term-missing --cov-report=html
 ruff check .                                           # error-level lint
-shellcheck -S warning deploy/*.sh                      # the scripts you run
 ```
 
-- The `data/` footage is large and gitignored, so it is absent on fresh clones.
-  Tests needing real recordings are marked `needs_data` and **skip
-  automatically** (see `tests/conftest.py`). The data-independent subset covers
-  **~99% of the code**; CI enforces a 90% floor.
+- The `data/` footage is large and not part of this snapshot. Tests needing real
+  recordings are marked `needs_data` and **skip automatically** (see
+  `tests/conftest.py`); the data-independent subset covers about 99% of the
+  code.
 - Intentionally excluded from coverage, because they cannot run off the boat:
   hardware I/O loops (`data_collection/`, `imu_bno085.py`), interactive GUI
-  event loops (`viewer.py`, `dashboard.py`, `thermal_calibrate.py`), and
-  GPU/VLM node scripts. The list and its rationale are in `pyproject.toml`
-  under `[tool.coverage.run]`.
-
-Four workflows run on every push and pull request to `main`:
-
-| Workflow | What it proves |
-|---|---|
-| **CI** (`ci.yml`) | The suite passes on Python 3.11 and 3.12, with the 90% coverage floor enforced. Uploads the HTML coverage report. |
-| **Lint** (`lint.yml`) | `ruff` finds no error-level defects, `shellcheck` is clean (warning level for `deploy/`, error level everywhere), every shell script parses, every YAML loads. |
-| **Docs** (`docs.yml`) | No dangling `docs/` or `deploy/` citation anywhere in the tree, no broken relative links, nothing missing from the index, and `field_reference.tex` still builds to a PDF. |
-| **Pi compatibility** (`pi-compat.yml`) | The capture stack still imports and byte-compiles **without `picamera2`**, so the Pi-side code cannot break the laptop test suite. It also checks the sensor-enable flags resolve correctly. |
-
-The lint gate is deliberately an **error** linter, not a style one: this is
-research code, so it fails on things that cannot be correct (undefined names,
-unreachable branches, broken format strings, mutable defaults) rather than on
-import order. The rationale
-and rule list are in `pyproject.toml` under `[tool.ruff]`.
+  event loops, and GPU-node scripts. The list and its rationale are in
+  `pyproject.toml` under `[tool.coverage.run]`.
+- The lint gate is an **error** linter, not a style one: it fails on things
+  that cannot be correct (undefined names, unreachable branches, broken format
+  strings, mutable defaults), not on import order (`[tool.ruff]` in
+  `pyproject.toml`).
 
 `python -m scripts.eval.healthcheck` is the broader gate: configs, every clip
 through the pipeline, and the test suite in one command.
 
+## Closed-loop trials
+
+On 2026-09-08 the chain box → Bluetooth LE sector stream → navigation
+controller → rudder was run on the lake from daylight into night: 44 armed
+launches, **24 driven legs (16 day, 4 dusk, 4 night), 350 m under autonomy**,
+with the crew's RC switch as the only other control. Each launch holds station
+for 10 to 20 s, takes the median sector field, chooses the least-obstructed
+heading within ±45° (with a closeness penalty on radar returns inside 8 m) and
+drives a 15 to 20 m checkpoint at low throttle. The figures are generated from
+the boat's own decision logs by `scripts/eval/closed_loop_figures.py`; the
+per-launch table is `images/closed_loop/trials.csv`.
+
+![Closed-loop trials, 2026-09-08](images/closed_loop/summary.png)
+
+*A: every driven leg in the bow-up frame at the decision, coloured by sun
+elevation, with the obstacle sector (p ≥ 0.6) marked. C: chosen heading against
+the bearing of the strongest sector; nothing lies on the "toward the obstacle"
+diagonal once the evidence rule was switched to the per-sector maximum of the
+learned probability and the fused vote at 18:20 (the first eight legs, learned
+probability alone, sent six of eight straight ahead because the scorer floors
+camera-only evidence beyond the radar's 9 m). D/F: outcome by light level and
+the numbers.*
+
+One daytime decision in full (fisheye at the decision, sector field and track,
+evidence per sector over the hold and the leg):
+
+![Trial 18:31, day](images/closed_loop/trial_183046.png)
+
+And one at night, with the RGB frame rejected as too dark and the heading chosen
+on thermal and radar evidence alone:
+
+![Trial 21:03, night](images/closed_loop/trial_210313.png)
+
+Read the night legs narrowly: the learned probabilities were nearly flat there
+(no sector above 0.34), so those headings followed small differences in the
+radar-derived field rather than a confident obstacle estimate. That is the
+open problem stated under [Project status](#project-status).
+
 ## Documentation
 
-Start at **[docs/README.md](docs/README.md)**: the full index. The four you are
-most likely to want:
+[docs/README.md](docs/README.md) indexes the reference set shipped with this
+snapshot:
 
 | | |
 |---|---|
-| [docs/field_reference.pdf](docs/field_reference.pdf) | Every operational command with the files it writes. Current Pi addresses. |
-| [docs/guides/pi_setup.md](docs/guides/pi_setup.md) | Blank SD card → capturing box. |
-| [docs/guides/capture_runbook.md](docs/guides/capture_runbook.md) | Capture-day gates, sensor sets, protocols, troubleshooting. |
-| [docs/annotation_manual.pdf](docs/annotation_manual.pdf) | Labelling conventions and the audit workflow. |
+| [docs/reference/data_formats.md](docs/reference/data_formats.md) | Every on-disk stream the box writes and every feature table the scorer reads. |
+| [docs/reference/sector_protocol.md](docs/reference/sector_protocol.md) | The per-frame sector contract the navigation layer consumes (JSONL and the 46-byte BLE packet). |
+| [docs/reference/extrinsics.md](docs/reference/extrinsics.md) | Measured sensor offsets (photogrammetry, ±1 mm) and the remount table. |
+| [docs/reference/segmentation.md](docs/reference/segmentation.md) | The LaRS/eWaSR water-segmentation layer and the distilled student: what they are trusted for. |
+| [docs/reference/pi_timing.md](docs/reference/pi_timing.md) | On-box timing of every model, stage and configuration on the Pi 4, and the two throttles that corrupt naive benchmarks. |
+
+The GPU-side workflows have their own READMEs under `scripts/gpu_*/`; the
+dashboard has [dashboard/README.md](dashboard/README.md).
 
 ## Project status
 
 Working and verified on hardware: the capture stack (all four sensors,
 RTC-backed timestamps, reduced sensor sets), real-time segmentation on the Pi,
-the offline fusion pipeline, and the evaluation suite.
+the offline fusion pipeline and evaluation suite, the on-vessel scorer with its
+Bluetooth LE sector link (3 Hz in the radar+IMU configuration, 1.24 Hz with
+segmentation beside capture on the boat supply), and the closed-loop pilot above.
 
 Two things to know before relying on this:
 
-- **The fusion output is evaluation-grade and deliberately not wired into
-  closed-loop navigation.** The segmentation-derived range and free-space
-  outputs are replay-only until the fail-safe rules and the navigation-handoff
-  protocol land.
-- **Boat power: resolved 2026-08-14.** The long-running brownout traced to
-  **reversed power and ground connections** in the wiring, caught by the current
-  limiter with no damage, rather than to the DC-DC converter it was first
-  attributed to. See
-  [docs/reference/power_and_supply.md](docs/reference/power_and_supply.md);
-  reassembly and bring-up in
-  [docs/guides/box_reassembly.md](docs/guides/box_reassembly.md).
+- **Night fusion is the open problem.** Once the RGB frame is black
+  (mean luminance below 25) the learned scorer must have its segmentation masks
+  and pseudo-labels gated away, and on the audited night frames the rule-based
+  vote (AP 0.58) still beats every learned variant (at most 0.52), while
+  thermal-only and radar-only models recall far more of the persons. The
+  controller therefore uses the per-sector maximum of the learned probability
+  and the fused vote. More audited night frames with obstacles inside the
+  radar's 9 m envelope are the prerequisite for a learned night model.
+- **The pilot was slow and supervised.** Fixed low throttle, 15 to 20 m legs,
+  the 4 m abort rule switched off after its first trigger on a moored boat, and
+  the crew on the water with the RC switch. Speed above the slow throttle,
+  moving obstacles, sail-driven legs and abort timing at real closing speeds
+  are untested.
 
 ## Authors
 

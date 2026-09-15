@@ -62,7 +62,7 @@ export function colourForClass(cls: string): string {
   );
 }
 
-/** Sequential Seeblau ramp (light -> deep) for magnitude encodings. */
+/** Sequential accent blue ramp (light -> deep) for magnitude encodings. */
 export const SEEBLAU_RAMP = [
   "#cceef9",
   "#a6e1f4",

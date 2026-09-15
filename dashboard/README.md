@@ -2,9 +2,8 @@
 
 Web recreation of the obstacle-detection data visualisation + annotation
 dashboard: Next.js on Vercel, Supabase for data, no local datasets required.
-The visual identity follows the Institution One corporate design —
-Seeblau (Pantone 2995) as the single accent over Papierweiß, with a full dark
-mode restating the same tokens.
+The visual identity uses a single blue accent over an off-white ground, with a
+full dark mode restating the same tokens.
 
 ## What it does
 
@@ -245,14 +244,14 @@ its organisations, so a collaborator can never import another person's
 **private personal** repository, however the Vercel GitHub App is installed
 there (AuthorOne installed it on `gh-handle-one` on 2026-09-07; the CLI still answered
 "make sure you have access"). The project is therefore connected to a private
-fork, `AuthorTwoIsCoding/ASVProject-ObstacleDetection`, Production Branch `main`,
+fork, `gh-handle-two/ASVProject-ObstacleDetection`, Production Branch `main`,
 Root Directory `dashboard` (set through the API; the CLI link left it at `.`).
 The laptop's `origin` has **two push URLs** (gh-handle-one + the fork), so a single
 `git push origin main` updates both and the fork never drifts:
 
 ```bash
 git remote set-url --add --push origin https://github.com/gh-handle-one/ASVProject-ObstacleDetection.git
-git remote set-url --add --push origin https://github.com/AuthorTwoIsCoding/ASVProject-ObstacleDetection.git
+git remote set-url --add --push origin https://github.com/gh-handle-two/ASVProject-ObstacleDetection.git
 ```
 
 Anyone else pushing to `gh-handle-one` alone does not deploy; either add the same
@@ -296,7 +295,7 @@ per theme). Chart colours were validated with the dataviz six-checks
 
 - Sensor trio — fisheye `#1487B8`, thermal `#B8741A`, radar `#7A6BB5`
   (light); `#1D9BD1` / `#C68018` / `#8F7FD0` (dark).
-- Sequential = the Seeblau rasterisation ramp (20/35/65/100 + deep).
+- Sequential = the accent-blue rasterisation ramp (20/35/65/100 + deep).
 - Amber `#F2A33C` is reserved for the water edge + threshold marks (as on
   the poster); status colours are reserved and always carry an icon + label.
 - Detection-class colours mirror `scripts/utils/detections.CLASS_COLOURS`

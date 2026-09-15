@@ -1,15 +1,30 @@
 {
-  "name": "SailSwarm · Obstacle Detection",
-  "short_name": "SailSwarm",
-  "description": "Data visualisation and annotation dashboard for the SailSwarm obstacle-detection payload (Universität Konstanz).",
+  "name": "ASV Obstacle Detection",
+  "short_name": "ASV Obstacles",
+  "description": "Data visualisation and annotation dashboard for the ASV multimodal obstacle-detection payload.",
   "start_url": "/clips",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#00a9e0",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

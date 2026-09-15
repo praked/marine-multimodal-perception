@@ -2,14 +2,14 @@
 
 /* ---------------------------------------------------------------------------
    Institution One corporate design, adapted for a working dashboard.
-   Seeblau (Pantone 2995, #00A9E0) is the single accent; rasterisation tints
+   accent blue (#00A9E0) is the single accent; rasterisation tints
    20/35/65/100 give the sequential family. Typography is near-black ink on
-   Papierweiß; dark mode restates the same system on a lake-at-night surface.
+   paper white; dark mode restates the same system on a lake-at-night surface.
    Chart palette validated with the dataviz six-checks (see docs/DESIGN.md).
 --------------------------------------------------------------------------- */
 
 :root {
-  /* surfaces (light = Papierweiß with a faint Seeblau cast for depth) */
+  /* surfaces (light = paper white with a faint accent blue cast for depth) */
   --background: #ffffff;
   --surface-1: #fbfdfe;
   --surface-2: #f2f9fc;
@@ -23,7 +23,7 @@
   --subtle: #66808f;
   --inverse: #ffffff;
 
-  /* Seeblau family (CD rasterisation steps) */
+  /* accent blue family (CD rasterisation steps) */
   --seeblau-20: #cceef9;
   --seeblau-35: #a6e1f4;
   --seeblau-65: #59c7eb;
