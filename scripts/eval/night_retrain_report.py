@@ -39,7 +39,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 CEST = timezone(timedelta(hours=2))
-LAT, LON = 47.6956, 9.1938
+LAT, LON = 46.0, 9.0
 SCENE = "2026-09-08_afloat_2026-09-08_17-10-55"
 NIGHT_TRIALS = ("20:27:00", "21:10:00")
 

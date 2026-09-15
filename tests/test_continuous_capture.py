@@ -666,7 +666,7 @@ class _StubGPS:
         self.closed = True
 
 
-def _fix(lat=47.695639, lon=9.193917, source="boat_log", quality=4, when=None):
+def _fix(lat=46.000000, lon=9.000000, source="boat_log", quality=4, when=None):
     from datetime import datetime, timezone
 
     from scripts.sensor_processing.gps_boat1 import GPSFix
@@ -693,7 +693,7 @@ def test_gps_row_records_source_and_the_sources_own_time(reload_cc):
     cc = reload_cc()
     row = cc.gps_row(_fix(), datetime(2026, 8, 24, 12, 0, 0, 123456))
     assert row[0] == "2026-08-24" and row[1] == "12:00:00.1"
-    assert row[2] == "47.6956390" and row[3] == "9.1939170"
+    assert row[2] == "46.0000000" and row[3] == "9.0000000"
     assert row[4] == 4 and row[5] == "boat_log"
     assert row[6] == "2026-08-24T10:00:00+00:00"
 

@@ -68,18 +68,18 @@ ble_char_uuid: ""      # read/notify characteristic carrying the position
 packet_fmt: nmea
 
 # --- 3. Fixed fallback (last resort) ----------------------------------------
-# 47°41'44.3"N 9°11'38.1"E — the usual launch point (AuthorTwo, 2026-08-24). Lets a
+# a fixed launch point — the usual launch point (AuthorTwo, 2026-08-24). Lets a
 # clip carry a defensible sun geometry when neither live source answers: the
 # lake is small enough that solar elevation varies by well under a degree
 # across it. Rows record source=fallback and the smoke test flags it, so this
 # can never be mistaken for a measured position. Set lat/lon to null to refuse
 # to record one at all.
 # (`dashboard/tools/enrich_bundle.py` GPS_INIT holds the same point for the
-# whole dashboard corpus, at 9.193889 — 2 m away, the same place read off the
-# map twice. Immaterial for sun geometry; not a bug to reconcile.)
+# whole dashboard corpus.) The coordinates in this snapshot are a placeholder:
+# the trial site's position is withheld for anonymous review.
 fallback:
-  lat: 47.695639
-  lon: 9.193917
+  lat: 46.000000
+  lon: 9.000000
   note: "launch point, fixed: NOT a measured position"
 
 # GPS here is slow metadata: read once at init, then on this cadence.

@@ -155,18 +155,18 @@ def test_range_reference_none_when_range_disabled(intrinsics_real,
 # ---------------------------------------------------------------------------
 
 def test_frame_datetime_utc_summer_offset():
-    utc = frame_datetime_utc("2026-07-08", "14:00:00.0", "Europe/Berlin")
+    utc = frame_datetime_utc("2026-07-08", "14:00:00.0", "CET")
     assert (utc.hour, utc.minute) == (12, 0)      # CEST = UTC+2
 
 
 def test_frame_datetime_utc_midnight_rollover():
-    utc = frame_datetime_utc("2026-07-08", "00:00:05.0", "Europe/Berlin",
+    utc = frame_datetime_utc("2026-07-08", "00:00:05.0", "CET",
                              chunk_start_hms="23-59-50")
     assert utc.day == 8 and utc.hour == 22        # local 07-09 00:00 CEST
 
 
 def test_sun_position_institutionone_noon_is_high():
-    utc = frame_datetime_utc("2026-07-08", "13:30:00.0", "Europe/Berlin")
+    utc = frame_datetime_utc("2026-07-08", "13:30:00.0", "CET")
     elev, az = sun_position(DEFAULT_LAT, DEFAULT_LON, utc)
     assert elev > 50.0
     assert 100.0 < az < 260.0

@@ -55,7 +55,7 @@ NAVY, MUTED, GOOD, WARN, LINE = "#0A2A3A", "#4C7B94", "#2E8B57", "#D97E0C", "#DC
 TRIAL, DARK = "#0A2A3A", "#6B6B6B"
 
 CEST = timezone(timedelta(hours=2))
-LAT, LON = 47.6956, 9.1938
+LAT, LON = 46.0, 9.0
 SCENE = "2026-09-08_afloat_2026-09-08_17-10-55"
 NIGHT_TRIALS = ("20:27:00", "21:10:00")
 SKIP_CHUNKS = ("2026-09-08_21-36-23",)  # unreadable

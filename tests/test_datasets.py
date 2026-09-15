@@ -259,13 +259,13 @@ GPS_HEADER = "Date,Time,Lat,Lon,Fix,Source,FixTime\n"
 def test_load_gps_csv_reads_position_and_provenance(tmp_path):
     path = tmp_path / "gps_2026-08-24_12-00-00.csv"
     path.write_text(GPS_HEADER
-                    + "2026-08-24,12:00:00.1,47.6956390,9.1939170,4,boat_log,"
+                    + "2026-08-24,12:00:00.1,46.0000000,9.0000000,4,boat_log,"
                       "2026-08-24T09:59:58+00:00\n"
-                    + "2026-08-24,12:30:00.4,47.6960000,9.1950000,4,boat_log,"
+                    + "2026-08-24,12:30:00.4,46.0010000,9.0010000,4,boat_log,"
                       "2026-08-24T10:29:58+00:00\n")
     df = ds.load_gps_csv(path)
     assert len(df) == 2
-    assert df["Lat"].iloc[0] == pytest.approx(47.695639)
+    assert df["Lat"].iloc[0] == pytest.approx(46.000000)
     assert list(df["Source"]) == ["boat_log", "boat_log"]
     # RoundedTime is the 100 ms convention every other loader uses, so a
     # position can be matched to the radar-keyed frame timestamps.
@@ -278,7 +278,7 @@ def test_load_gps_csv_keeps_the_fallback_marker(tmp_path):
     measurement, and nothing downstream can tell from the coordinates alone."""
     path = tmp_path / "gps_x.csv"
     path.write_text(GPS_HEADER
-                    + "2026-08-24,12:00:00.1,47.6956390,9.1939170,,fallback,\n")
+                    + "2026-08-24,12:00:00.1,46.0000000,9.0000000,,fallback,\n")
     df = ds.load_gps_csv(path)
     assert df["Source"].iloc[0] == "fallback"
 

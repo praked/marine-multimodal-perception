@@ -81,12 +81,10 @@ export function ReplayScene({
     controls.minDistance = 4;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
 
-    // --- ground: satellite sector (top edge of the image = north = -Z)
+    // --- ground: flat water-coloured plane (top edge = north = -Z). The site
+    // orthophoto is withheld in this snapshot; drop a texture in here to restore it.
     const texLoader = new THREE.TextureLoader();
-    const satTex = texLoader.load("/replay/satellite_sector.jpg");
-    satTex.colorSpace = THREE.SRGBColorSpace;
-    // Unlit satellite imagery keeps its true colours; daylight modulates it.
-    const groundMat = new THREE.MeshBasicMaterial({ map: satTex });
+    const groundMat = new THREE.MeshBasicMaterial({ color: 0x3a6d8c });
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(SECTOR_M, SECTOR_M),
       groundMat,

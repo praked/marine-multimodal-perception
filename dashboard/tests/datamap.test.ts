@@ -30,8 +30,8 @@ describe("enriched demo bundle", () => {
   it("both demo clips carry a full enrichment block", () => {
     for (const c of clips) {
       expect(c.enrichment).toBeDefined();
-      expect(c.enrichment!.gps_init.lat).toBeCloseTo(47.6956, 3);
-      expect(c.enrichment!.gps_init.lon).toBeCloseTo(9.1939, 3);
+      expect(c.enrichment!.gps_init.lat).toBeCloseTo(46.0, 3);
+      expect(c.enrichment!.gps_init.lon).toBeCloseTo(9.0, 3);
       expect(c.enrichment!.sun_samples.length).toBeGreaterThan(0);
       expect(c.enrichment!.luminance.hist).toHaveLength(16);
     }
@@ -82,20 +82,20 @@ describe("enriched demo bundle", () => {
 });
 
 describe("declinationPath (solstice envelope geometry)", () => {
-  it("summer solstice at InstitutionOne peaks near 65.7°", () => {
-    const summer = declinationPath(47.6956, 23.44);
+  it("summer solstice at the placeholder site peaks near 67.4°", () => {
+    const summer = declinationPath(46.0, 23.44);
     const maxElev = Math.max(...summer.map(([e]) => e));
-    expect(maxElev).toBeGreaterThan(64.5);
-    expect(maxElev).toBeLessThan(66.5);
+    expect(maxElev).toBeGreaterThan(66.5);
+    expect(maxElev).toBeLessThan(68.5);
   });
 
-  it("winter solstice peaks near 18.9° and spans a shorter arc", () => {
-    const winter = declinationPath(47.6956, -23.44);
+  it("winter solstice peaks near 20.6° and spans a shorter arc", () => {
+    const winter = declinationPath(46.0, -23.44);
     const maxElev = Math.max(...winter.map(([e]) => e));
-    expect(maxElev).toBeGreaterThan(17.5);
-    expect(maxElev).toBeLessThan(20);
+    expect(maxElev).toBeGreaterThan(19.5);
+    expect(maxElev).toBeLessThan(21.5);
     expect(winter.length).toBeLessThan(
-      declinationPath(47.6956, 23.44).length,
+      declinationPath(46.0, 23.44).length,
     );
   });
 });

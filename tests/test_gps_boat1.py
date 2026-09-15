@@ -51,16 +51,16 @@ def test_parse_nmea_no_fix_returns_none():
 
 
 def test_parse_latlon_f64_le():
-    data = struct.pack("<dd", 47.66, 9.18)
+    data = struct.pack("<dd", 46.0, 9.0)
     fix = parse_gps_packet(data, "latlon_f64_le")
-    assert fix.lat_deg == pytest.approx(47.66)
-    assert fix.lon_deg == pytest.approx(9.18)
+    assert fix.lat_deg == pytest.approx(46.0)
+    assert fix.lon_deg == pytest.approx(9.0)
     assert fix.fix_quality is None
 
 
 def test_parse_csv():
-    fix = parse_gps_packet(b"47.66,9.18,4\n", "csv")
-    assert (fix.lat_deg, fix.lon_deg, fix.fix_quality) == pytest.approx((47.66, 9.18, 4))
+    fix = parse_gps_packet(b"46.0,9.0,4\n", "csv")
+    assert (fix.lat_deg, fix.lon_deg, fix.fix_quality) == pytest.approx((46.0, 9.0, 4))
 
 
 def test_parse_short_binary_returns_none():
@@ -83,21 +83,21 @@ def test_sun_overhead_at_equator_equinox_noon():
 
 def test_sun_below_horizon_at_local_midnight():
     # InstitutionOne, ~local midnight (UTC ~23:00 in summer) -> sun well below horizon.
-    el, _az = sun_position(47.66, 9.18, datetime(2026, 6, 21, 23, 0, tzinfo=timezone.utc))
+    el, _az = sun_position(46.0, 9.0, datetime(2026, 6, 21, 23, 0, tzinfo=timezone.utc))
     assert el < 0.0
 
 
 def test_sun_higher_at_noon_than_morning():
-    noon, _ = sun_position(47.66, 9.18, datetime(2026, 6, 21, 11, 30, tzinfo=timezone.utc))
-    morn, _ = sun_position(47.66, 9.18, datetime(2026, 6, 21, 5, 0, tzinfo=timezone.utc))
+    noon, _ = sun_position(46.0, 9.0, datetime(2026, 6, 21, 11, 30, tzinfo=timezone.utc))
+    morn, _ = sun_position(46.0, 9.0, datetime(2026, 6, 21, 5, 0, tzinfo=timezone.utc))
     assert noon > morn > 0.0
     assert noon < 90.0
 
 
 def test_sun_summer_noon_elevation_institutionone_reasonable():
-    # Summer-solstice solar noon at ~47.66N: elevation ~ 90-(47.66-23.44) ~ 65.8 deg.
-    el, az = sun_position(47.66, 9.18, datetime(2026, 6, 21, 11, 24, tzinfo=timezone.utc))
-    assert el == pytest.approx(65.8, abs=2.0)
+    # Summer-solstice solar noon at 46.0N: elevation ~ 90-(46.0-23.44) ~ 67.4 deg.
+    el, az = sun_position(46.0, 9.0, datetime(2026, 6, 21, 11, 24, tzinfo=timezone.utc))
+    assert el == pytest.approx(67.4, abs=2.0)
     assert 150.0 < az < 210.0        # roughly due south at local noon
 
 
@@ -128,7 +128,7 @@ def test_nmea_to_deg_empty_field_raises():
 
 
 def test_parse_csv_too_few_fields_returns_none():
-    assert parse_gps_packet(b"47.66", "csv") is None
+    assert parse_gps_packet(b"46.0", "csv") is None
 
 
 def test_parse_csv_garbage_returns_none():
@@ -148,7 +148,7 @@ def test_parse_nmea_gga_quality_zero_with_coords_returns_none():
 def test_sun_january_date_julian_rollover():
     # month <= 2 exercises the y-=1/m+=12 Julian-day branch; winter noon at
     # InstitutionOne is low but above the horizon.
-    el, az = sun_position(47.66, 9.18,
+    el, az = sun_position(46.0, 9.0,
                           datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc))
     assert 0.0 < el < 30.0
     assert 0.0 <= az <= 360.0
@@ -267,13 +267,13 @@ def test_reader_loop_connect_read_publish(monkeypatch, fast_asyncio):
         async def read_gatt_char(self, char):
             assert char == "abcd"
             r.stop()               # exit after the first successful read
-            return bytearray(b"47.66,9.18,4")
+            return bytearray(b"46.0,9.0,4")
 
     _fake_bleak(monkeypatch, scanner=Scanner, client_cls=Client)
     asyncio.run(r._loop())
     fix = r.get()
     assert fix is not None
-    assert fix.lat_deg == pytest.approx(47.66)
+    assert fix.lat_deg == pytest.approx(46.0)
     assert fix.fix_quality == 4
     assert r.reads_ok == 1
     assert calls["n"] == 2         # first session raised, second published
@@ -418,10 +418,10 @@ def _run_cli(monkeypatch, fix, argv):
 
 
 def test_main_monitor_prints_fix_and_sun(monkeypatch, capsys):
-    rc = _run_cli(monkeypatch, GPSFix(47.66, 9.18, fix_quality=4), ["--monitor"])
+    rc = _run_cli(monkeypatch, GPSFix(46.0, 9.0, fix_quality=4), ["--monitor"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "lat=+47.66" in out and "sun elev=" in out
+    assert "lat=+46.0" in out and "sun elev=" in out
     assert _FakeReader.closed
 
 
@@ -435,7 +435,7 @@ def test_main_monitor_waiting_without_fix(monkeypatch, capsys):
 def test_main_check_reports_a_live_fix(monkeypatch, capsys):
     """No args = --check: resolve one fix exactly the way capture init does."""
     rc = _run_cli(monkeypatch,
-                  GPSFix(47.695639, 9.193917, fix_quality=4, source="boat_log"),
+                  GPSFix(46.000000, 9.000000, fix_quality=4, source="boat_log"),
                   [])
     out = capsys.readouterr().out
     assert rc == 0
@@ -445,7 +445,7 @@ def test_main_check_reports_a_live_fix(monkeypatch, capsys):
 def test_main_check_exit_2_on_a_fallback_position(monkeypatch, capsys):
     """A distinct exit code, because a fallback IS a resolved position and
     would otherwise read as success in a deploy-day script."""
-    rc = _run_cli(monkeypatch, GPSFix(47.6, 9.1, source="fallback"), [])
+    rc = _run_cli(monkeypatch, GPSFix(46.0, 9.0, source="fallback"), [])
     assert rc == 2
     assert "source=fallback" in capsys.readouterr().out
 
@@ -507,15 +507,15 @@ def test_boat_log_takes_the_newest_row_carrying_a_fix():
     # fix again: the answer must be the LAST row with coordinates, not the last
     # row and not the first fix.
     rows = ([_row(_iso(-60))] * 3
-            + [_row(_iso(-40), "47.6950", "9.1930", "4"),
-               _row(_iso(-30), "47.695639", "9.193917", "4")]
+            + [_row(_iso(-40), "46.0010", "9.0010", "4"),
+               _row(_iso(-30), "46.000000", "9.000000", "4")]
             + [_row(_iso(-5))])
     fix, path, note = parse_boat_log_payload(_payload(rows))
     assert fix is not None
-    assert (fix.lat_deg, fix.lon_deg) == pytest.approx((47.695639, 9.193917))
+    assert (fix.lat_deg, fix.lon_deg) == pytest.approx((46.000000, 9.000000))
     assert fix.fix_quality == 4 and fix.source == "boat_log"
     assert path.endswith("boat_log_20260824_120000.csv")
-    assert "47.695639" in note
+    assert "46.000000" in note
 
 
 def test_boat_log_records_the_rows_own_time_not_ours():
@@ -527,10 +527,10 @@ def test_boat_log_records_the_rows_own_time_not_ours():
 def test_boat_log_skips_null_island():
     """Empty NMEA fields coerced to 0.0 somewhere upstream: a fixless receiver,
     not a position in the Gulf of Guinea."""
-    rows = [_row(_iso(-30), "47.695639", "9.193917", "4"),
+    rows = [_row(_iso(-30), "46.000000", "9.000000", "4"),
             _row(_iso(-1), "0.0", "0.0", "1")]
     fix, _p, _n = parse_boat_log_payload(_payload(rows))
-    assert fix.lat_deg == pytest.approx(47.695639)
+    assert fix.lat_deg == pytest.approx(46.000000)
 
 
 def test_boat_log_no_fix_anywhere():
@@ -673,14 +673,14 @@ def test_ssh_reads_the_log_in_one_round_trip(monkeypatch):
     marginal boat link and removes the race where the log rotates mid-read."""
     calls = []
     _fake_ssh(monkeypatch,
-              stdout=_payload([_row(_iso(-10), "47.695639", "9.193917", "4")]),
+              stdout=_payload([_row(_iso(-10), "46.000000", "9.000000", "4")]),
               capture=calls)
     fix, note = read_boat_log_fix({"boat_log": {
         "ssh_host": "boat-b@boat-b",
         "log_glob": ["~/boatv1/logs/boat_log_*.csv"],
         "ssh_options": ["BatchMode=yes"], "tail_bytes": 4096,
         "ssh_timeout_s": 5.0, "max_age_s": 3600.0}})
-    assert fix.lat_deg == pytest.approx(47.695639)
+    assert fix.lat_deg == pytest.approx(46.000000)
     assert note.startswith("boat-b@boat-b:/home/boat-b/boatv1/logs/")
     assert len(calls) == 1
     cmd, kwargs = calls[0]
@@ -771,7 +771,7 @@ def _chain(tmp_path, sources, **over):
            "boat_log": {"ssh_host": "", "max_age_s": None,
                         "log_glob": str(tmp_path / "boat_log_*.csv")},
            "ble_char_uuid": "", "packet_fmt": "csv",
-           "fallback": {"lat": 47.695639, "lon": 9.193917, "note": "launch"},
+           "fallback": {"lat": 46.000000, "lon": 9.000000, "note": "launch"},
            "refresh_interval_s": 1800.0, "stale_after_s": 3600.0}
     cfg.update(over)
     return GPSReader(cfg)
@@ -790,7 +790,7 @@ def test_chain_falls_back_when_the_boat_is_unreachable(tmp_path):
     r.boat_log.poll_once()
     fix = r.get()
     assert fix.source == "fallback"
-    assert (fix.lat_deg, fix.lon_deg) == pytest.approx((47.695639, 9.193917))
+    assert (fix.lat_deg, fix.lon_deg) == pytest.approx((46.000000, 9.000000))
 
 
 def test_chain_live_only_never_returns_the_fallback(tmp_path):
@@ -881,7 +881,7 @@ def test_describe_names_the_host_and_the_reason(tmp_path, monkeypatch):
     r.boat_log.poll_once()
     text = r.describe()
     assert "boat-b@boat-b" in text and "no boat log found" in text
-    assert "fallback: +47.695639" in text
+    assert "fallback: +46.000000" in text
 
 
 def test_fallback_without_coordinates_is_not_invented(tmp_path):

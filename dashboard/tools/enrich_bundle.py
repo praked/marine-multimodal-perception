@@ -3,7 +3,7 @@ map (and, downstream, the fusion-scorer context features):
 
 - gps_init:    static capture position until live GPS lands (source-tagged)
 - sun:         per-clip sun-path samples (elevation/azimuth, NOAA solar
-               geometry, Europe/Berlin DST-aware) + daypart classification
+               geometry, CET DST-aware) + daypart classification
 - luminance:   per-frame mean luma sampled from the baked JPEGs -> histogram
 - weather:     Open-Meteo archive (cloud cover, precipitation, wind, temp);
                honest nulls when offline / not yet archived
@@ -29,9 +29,9 @@ from zoneinfo import ZoneInfo
 import cv2
 
 BUNDLE = Path("/Volumes/ROS2_SSD/asvproject/dashboard_bundle")
-TZ = ZoneInfo("Europe/Berlin")
+TZ = ZoneInfo("CET")
 
-# 47°41'44.3"N 9°11'38.0"E — the capture site, used for sun geometry and the
+# a fixed site position (placeholder in this snapshot) — the capture site, used for sun geometry and the
 # weather lookup for every clip in the bundle.
 #
 # Live GPS reached CAPTURE on 2026-08-24: clips recorded from then on carry a
@@ -42,11 +42,10 @@ TZ = ZoneInfo("Europe/Berlin")
 # per-clip refinement, not a correction; when someone does, honour its `Source`
 # column (a `fallback` row is this same guess wearing per-clip coordinates).
 #
-# NB `configs/gps.yaml` holds the same point as the capture-side fallback, at
-# 9.193917 rather than 9.193889 — 2 m apart, i.e. the same place read off the
-# map twice. Neither is wrong and neither matters here; don't "fix" one into
-# the other believing you have found a bug.
-GPS_INIT = {"lat": 47.695639, "lon": 9.193889, "source": "static_init"}
+# NB `configs/gps.yaml` holds the same point as the capture-side fallback.
+# The coordinates in this snapshot are a placeholder: the trial site's position
+# is withheld for anonymous review.
+GPS_INIT = {"lat": 46.000000, "lon": 9.000000, "source": "static_init"}
 
 LUM_SAMPLE_EVERY = 3
 LUM_BINS = 16  # 0..255 in 16-wide bins
@@ -106,7 +105,7 @@ def fetch_weather(date_str: str, offline: bool) -> dict | None:
          {"past_days": "92", "forecast_days": "1"}),
     ):
         params = {"latitude": GPS_INIT["lat"], "longitude": GPS_INIT["lon"],
-                  "hourly": hourly, "timezone": "Europe/Berlin", **extra}
+                  "hourly": hourly, "timezone": "CET", **extra}
         try:
             with urllib.request.urlopen(
                     f"{base}?{urllib.parse.urlencode(params)}", timeout=15) as r:

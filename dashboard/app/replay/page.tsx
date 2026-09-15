@@ -126,7 +126,7 @@ export default function ReplayPage() {
           ))}
         </select>
         <span className="ml-auto font-mono text-[10px] text-subtle">
-          sun + moon on real ephemeris · Datengrundlage: LGL, www.lgl-bw.de (dl-de/by-2-0) · sun + moon models NASA
+          sun + moon on real ephemeris · sun + moon models NASA
         </span>
       </div>
 

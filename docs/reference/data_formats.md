@@ -18,7 +18,7 @@ are the single entry points; do not re-parse these files by hand.
 | `radar_profile.cfg` | *(read by eye)* | the radar chirp/detection config the clip was captured under, verbatim, plus `% source:` and `% summary:` header lines (since 2026-08-19) | one per capture directory, not per chunk. The summary line carries `channelCfg`, `cfarCfg` and `clutterRemoval`, i.e. what field A/Bs vary. Written because the 2026-08-19 clutterRemoval A/B silently ran both halves on the default profile: a clip that cannot say how its radar was configured cannot be compared with another |
 
 **Time.** All `Date,Time` values are the Pi system clock = **local time**
-(Europe/Berlin), RTC-backed since 2026-07-16 (correct offline).
+(CET), RTC-backed since 2026-07-16 (correct offline).
 `RoundedTime` = `HH:MM:SS.f` truncated to 100 ms: the cross-stream join key
 (matches the radar's 100 ms frame). `iterate_triplet` walks radar
 RoundedTime groups as the master clock, one video frame per group; when the
@@ -110,7 +110,7 @@ config generations in one training run.
   data); the radar-keyed iteration can also desync on capture FPS drift
   for the oldest clips (CLAUDE.md §7 time-alignment note).
 - Sun position uses `build_features`' own fixed-lake fallback
-  (47.66, 9.18) on every clip captured before 2026-08-24, which has no
+  (46.0, 9.0) on every clip captured before 2026-08-24, which has no
   `gps_<ts>.csv` sidecar: fine for elevation/azimuth (<1° across Lake
   the lake). Clips WITH a sidecar are not yet wired into
   `build_features` (`--lat/--lon` still take a single value for the whole

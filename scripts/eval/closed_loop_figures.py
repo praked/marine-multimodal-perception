@@ -35,7 +35,7 @@ import numpy as np
 
 CEST = timezone(timedelta(hours=2))
 BINS = [-45, -30, -15, 0, 15, 30, 45]
-LAT0 = 47.6956
+LAT0 = 46.0
 END = {"interrupted": "handed back by the crew (RC switch)", "checkpoint reached": "checkpoint reached",
        "station keeping done": "station keeping done", "running": "still running when the log was pulled"}
 
@@ -107,7 +107,7 @@ class Trial:
         self.rel = d.get("rel_heading_deg") if d else None
         self.p = d.get("p") if d else None
         self.min_range = d.get("min_range_m") if d else None
-        self.sun = sun_elev(self.lat0 or LAT0, self.lon0 or 9.1938, self.t_decide or self.t_start) if (self.t_decide or self.t_start) else float("nan")
+        self.sun = sun_elev(self.lat0 or LAT0, self.lon0 or 9.0, self.t_decide or self.t_start) if (self.t_decide or self.t_start) else float("nan")
         self.leg_s = len(self.cycles) / 10.0
         self.moved = 0.0
         pts = [(r["lat"], r["lon"]) for r in self.cycles if r.get("lat") is not None]
@@ -414,7 +414,7 @@ def summary_figure(trials, out, legs_only=False):
     cb = fig.colorbar(sm, ax=ax, fraction=0.045, pad=0.02); cb.set_label("sun elevation at the decision (°)")
     # B: timeline
     ax = axs[0, 2]
-    lat, lon = LAT0, 9.1938
+    lat, lon = LAT0, 9.0
     ts = [datetime(2026, 9, 8, 17, 0, tzinfo=CEST) + timedelta(minutes=m) for m in range(0, 260, 2)]
     el = [sun_elev(lat, lon, t) for t in ts]
     hours = [t.hour + t.minute / 60 for t in ts]

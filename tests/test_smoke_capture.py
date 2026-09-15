@@ -145,7 +145,7 @@ GPS_HEADER = "Date,Time,Lat,Lon,Fix,Source,FixTime\n"
 
 def _write_gps(d, source="boat_log", fix="4"):
     (d / "gps_ts.csv").write_text(
-        GPS_HEADER + f"2026-08-24,12:00:00.1,47.6956390,9.1939170,{fix},"
+        GPS_HEADER + f"2026-08-24,12:00:00.1,46.0000000,9.0000000,{fix},"
                      f"{source},2026-08-24T09:59:58+00:00\n")
 
 
@@ -195,7 +195,7 @@ def test_gps_status_detail_is_printed(full_stack_dir, capsys):
     _write_gps(full_stack_dir, source="fallback", fix="")
     validate(str(full_stack_dir), ALL_ON_GPS, ALL_ON_GPS,
              gps_status="boat_log[boat-b@boat-b] no fix: no route to host "
-                        "| fallback: +47.695639,+9.193917")
+                        "| fallback: +46.000000,+9.000000")
     out = capsys.readouterr().out
     assert "boat-b@boat-b" in out and "no route to host" in out
 

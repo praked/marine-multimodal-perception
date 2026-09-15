@@ -118,10 +118,10 @@ def exposure_table(triplet) -> dict[int, dict[str, float]]:
 # Fallback fix for sun geometry when no GPS sidecar exists (all clips so
 # far). InstitutionOne shoreline; anywhere on the lake changes solar
 # elevation by well under a degree, so one fixed point serves the corpus.
-DEFAULT_LAT = 47.66
-DEFAULT_LON = 9.18
+DEFAULT_LAT = 46.0
+DEFAULT_LON = 9.0
 # Capture timestamps are the Pi system clock = local time (RTC-backed).
-DEFAULT_TZ = "Europe/Berlin"
+DEFAULT_TZ = "CET"
 
 
 # ---------------------------------------------------------------------------

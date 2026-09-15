@@ -198,7 +198,7 @@ def _block_sklearn(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 def test_frame_datetime_utc_bad_chunk_start_ignored():
-    utc = frame_datetime_utc("2026-07-08", "14:00:00.0", "Europe/Berlin",
+    utc = frame_datetime_utc("2026-07-08", "14:00:00.0", "CET",
                              chunk_start_hms="not-a-time")
     assert (utc.hour, utc.minute) == (12, 0)   # parse error -> no rollover
 
@@ -346,7 +346,7 @@ def test_build_features_main_ok_with_skip(tmp_path):
         "--limit", "2",
         "--intrinsics", str(REPO_ROOT / "configs" / "intrinsics.yaml"),
         "--detection", str(REPO_ROOT / "configs" / "detection.yaml"),
-        "--lat", "47.6", "--lon", "9.2", "--tz", "Europe/Berlin",
+        "--lat", "46.0", "--lon", "9.0", "--tz", "CET",
     ])
     assert rc == 0
     out_dir = out_root / f"Synth__{ts}"

@@ -5,13 +5,13 @@ import {
 } from "@/lib/celestial";
 import { describe, expect, it } from "vitest";
 
-const LAT = 47.695639;
-const LON = 9.193889;
+const LAT = 46.000000;
+const LON = 9.000000;
 
 describe("sunPosition (mirrors the Python enrichment)", () => {
   it("matches the enrichment's validated July noon value", () => {
     const p = sunPosition(new Date("2026-07-08T11:20:00Z"), LAT, LON);
-    expect(p.elevationDeg).toBeCloseTo(64.7, 0);
+    expect(p.elevationDeg).toBeCloseTo(66.4, 0);
     expect(p.azimuthDeg).toBeGreaterThan(160);
     expect(p.azimuthDeg).toBeLessThan(195);
   });
