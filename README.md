@@ -500,14 +500,14 @@ through the pipeline, and the test suite in one command.
 ## Closed-loop trials
 
 On 2026-09-08 the chain box → Bluetooth LE sector stream → navigation
-controller → rudder was run on the lake from daylight into night: 44 armed
-launches, **24 driven legs (16 day, 4 dusk, 4 night), 350 m under autonomy**,
-with the crew's RC switch as the only other control. Each launch holds station
+controller → rudder was run on the lake from daylight into night: **24 driven
+legs (16 day, 4 dusk, 4 night), 350 m under autonomy**, with the crew's RC
+switch as the only other control. Each launch holds station
 for 10 to 20 s, takes the median sector field, chooses the least-obstructed
 heading within ±45° (with a closeness penalty on radar returns inside 8 m) and
 drives a 15 to 20 m checkpoint at low throttle. The figures are generated from
-the boat's own decision logs by `scripts/eval/closed_loop_figures.py`; the
-per-launch table is `images/closed_loop/trials.csv`.
+the boat's own decision logs by `scripts/eval/closed_loop_figures.py`
+(`--legs-only`).
 
 ![Closed-loop trials, 2026-09-08](images/closed_loop/summary.png)
 

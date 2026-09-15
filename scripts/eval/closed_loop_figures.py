@@ -326,7 +326,8 @@ def per_trial_figure(tr, logs_dir, capture_dir, out):
     plt.close(fig)
 
 
-def summary_figure(trials, out):
+def summary_figure(trials, out, legs_only=False):
+    """legs_only: show driven legs only (no refused-launch markers, bars or counts)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -362,8 +363,9 @@ def summary_figure(trials, out):
     mx = [t for t in acc if t.evidence == "max"]
     lines = [
         "Trials 2026-09-08, boat-a, the lake",
-        f"armed launches: {len(armed)}   hold windows: {windows}   accepted: {ok_w}",
-        f"legs driven: {len(acc)}   refused launches: {len(refused)}",
+        *([f"legs driven: {len(acc)}"] if legs_only else
+          [f"armed launches: {len(armed)}   hold windows: {windows}   accepted: {ok_w}",
+           f"legs driven: {len(acc)}   refused launches: {len(refused)}"]),
         f"legs by light: day {sum(t.light()=='day' for t in acc)}, dusk {sum(t.light()=='dusk' for t in acc)}, night {sum(t.light()=='night' for t in acc)}",
         f"distance under autonomy: {sum(t.moved for t in acc):.0f} m in {sum(t.leg_s for t in acc):.0f} s",
         f"station keeping after the leg: {sum(1 for t in acc if t.station)} legs, {sum(len(t.station) for t in acc)} s",
@@ -425,7 +427,7 @@ def summary_figure(trials, out):
         h = t.t_start.hour + t.t_start.minute / 60 + t.t_start.second / 3600
         if t.decision and t.cycles:
             ax.plot(h, t.sun, "o", color=cmap(norm(t.sun)), ms=5 + 0.35 * t.moved, mec="k", mew=0.5, zorder=4)
-        elif t.decides:
+        elif t.decides and not legs_only:
             ax.plot(h, t.sun, "o", color="white", mec="#B3392B", mew=1.2, ms=6, zorder=4)
     for h, lab in ((18 + 20 / 60, "evidence = max"), (18 + 43 / 60, "station keeping"), (19 + 25 / 60, "max-spread 0.5")):
         ax.axvline(h, color="#1487B8", lw=1, ls=":")
@@ -433,7 +435,7 @@ def summary_figure(trials, out):
     ax.set_xlim(17.2, 21.2); ax.set_ylim(-15, 28)
     ax.set_xlabel("time of day (CEST)"); ax.set_ylabel("sun elevation (°)")
     ax.text(21.1, 0.5, "sunset", ha="right", fontsize=8, color="#666"); ax.text(21.1, -5.5, "civil dusk", ha="right", fontsize=8, color="#666")
-    ax.set_title("B  Launches over the evening: filled = leg driven (size ∝ distance), hollow = every window refused", fontsize=10, loc="left")
+    ax.set_title("B  Legs over the evening (marker size ∝ distance)" if legs_only else "B  Launches over the evening: filled = leg driven (size ∝ distance), hollow = every window refused", fontsize=10, loc="left")
     ax.grid(alpha=0.25)
     # C: chosen heading vs obstacle bearing
     ax = axs[1, 0]
@@ -465,16 +467,18 @@ def summary_figure(trials, out):
         if t.armed and t.decides and not t.cycles:
             ref[t.light()] += 1
     x = np.arange(3)
-    ax.bar(x - 0.18, vals, 0.36, color="#1487B8", label="legs driven")
-    ax.bar(x + 0.18, [ref[k] for k in labels], 0.36, color="#B3392B", alpha=0.7, label="launches refused")
+    xoff = 0.0 if legs_only else -0.18
+    ax.bar(x + xoff, vals, 0.5 if legs_only else 0.36, color="#1487B8", label="legs driven")
+    if not legs_only:
+        ax.bar(x + 0.18, [ref[k] for k in labels], 0.36, color="#B3392B", alpha=0.7, label="launches refused")
     for i, k in enumerate(labels):
         if by[k]:
             hs = [f"{v:+.0f}" for v in sorted(by[k])]
             lines = [", ".join(hs[j:j + 6]) for j in range(0, len(hs), 6)]
-            ax.text(i - 0.18, vals[i] + 0.15, "\n".join(lines), ha="center", va="bottom", fontsize=6.5)
+            ax.text(i + xoff, vals[i] + 0.15, "\n".join(lines), ha="center", va="bottom", fontsize=6.5)
     ax.set_xticks(x); ax.set_xticklabels([f"{k}\n(sun > 6°)" if k == "day" else (f"{k}\n(6° … −6°)" if k == "dusk" else f"{k}\n(sun < −6°)") for k in labels])
-    ax.set_ylabel("launches"); ax.legend(fontsize=8, loc="upper right"); ax.grid(alpha=0.25, axis="y")
-    ax.set_ylim(0, max(vals + [ref[k] for k in labels]) * 1.35 + 1)
+    ax.set_ylabel("legs" if legs_only else "launches"); ax.legend(fontsize=8, loc="upper right"); ax.grid(alpha=0.25, axis="y")
+    ax.set_ylim(0, max(vals + ([] if legs_only else [ref[k] for k in labels])) * 1.35 + 1)
     med = np.median([abs(t.rel) for t in acc if t.rel is not None]) if acc else float("nan")
     ax.set_title(f"D  Outcome by light level · median |heading| {med:.0f}° · legs {sum(t.moved for t in acc):.0f} m total", fontsize=10, loc="left")
     fig.suptitle("Closed-loop avoidance trials, the lake, 2026-09-08 (boat-a, box in full/typed mode)", fontsize=12)
@@ -503,13 +507,14 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--since", default="17:25", help="ignore launches before this time (HH:MM)")
     ap.add_argument("--select", nargs="*", default=[], help="HHMMSS stamps for per-trial figures (default: every driven leg)")
+    ap.add_argument("--legs-only", action="store_true", help="summary shows driven legs only (no refused-launch markers, bars or counts)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     trials = [Trial(p) for p in sorted(glob.glob(os.path.join(a.logs, "sector_experiment_*.jsonl")))]
     hh, mm = map(int, a.since.split(":"))
     trials = [t for t in trials if t.t_start and (t.t_start.hour, t.t_start.minute) >= (hh, mm)]
     write_csv(trials, a.out)
-    summary_figure(trials, a.out)
+    summary_figure(trials, a.out, legs_only=a.legs_only)
     sel = set(a.select)
     for t in trials:
         if (sel and t.stamp[9:] in sel) or (not sel and t.decision and t.cycles):
