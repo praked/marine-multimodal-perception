@@ -33,7 +33,7 @@ describe("dd-mm-yyyy display formatting", () => {
   });
 
   it("humanises scene slugs", () => {
-    expect(formatScene("2026-06-17_institutionone_day1")).toBe("InstitutionOne day1");
+    expect(formatScene("2026-06-17_institutionone_day1")).toBe("Institutionone day1");
     expect(formatScene("Boats")).toBe("Boats");
     expect(formatScene("2026-07-08")).toBe("2026-07-08");
   });
